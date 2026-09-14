@@ -38,7 +38,9 @@ for arg in "$@"; do
     --ask)          MODE=ask ;;
     --start)        START=1 ;;
     --help|-h)
-      sed -n '2,15p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+      # The header block is however long it is; find its end rather than
+      # hardcoding a line number, which silently truncates when it is edited.
+      awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "${BASH_SOURCE[0]}"
       exit 0 ;;
     *) echo "unknown option: $arg (try --help)" >&2; exit 2 ;;
   esac

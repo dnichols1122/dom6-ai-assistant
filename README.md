@@ -89,6 +89,38 @@ rather than inventing what it would have said.
 [RUNNING.md](RUNNING.md) covers this properly, including Windows, pointing it at
 a model, and what each page is for.
 
+## Running it
+
+**Windows:** double-click **`start.bat`**. It opens a browser for you.
+
+**Linux and macOS:**
+
+```bash
+./start.sh          # or ./start.sh --open to open a browser too
+```
+
+Either way, the assistant is at <http://127.0.0.1:8001/>. Both take
+`--port 9000` if something already has that port.
+
+The first thing to do is point the **Model endpoint** box in the left panel at
+your model — a local server or a hosted API — and press **Test connection**. It
+says whether it reached the model and what that model is, so a wrong port or a
+missing `/v1` takes one click to find rather than showing up as a failure
+mid-conversation. **Save endpoint** applies from the next message; no restart.
+
+Leave it running while you play. It watches your save folder, so finishing a
+turn in Dominions is the whole workflow — there is nothing to import.
+
+| Page | What it is |
+|---|---|
+| `/` | The assistant. Three workspaces: Live turn, Pretender design, Open chat |
+| `/verify` | Every read tool run against your real save, with no model involved |
+| `/turns` | Turn overview built from ingested saves |
+
+**Start at `/verify` if you are new.** It shows exactly what the assistant can
+and cannot see, without contacting a model at all, which is the fastest way to
+judge whether to trust what it later tells you.
+
 ## What it does
 
 - **Parses `.trn`, `.2h` and `.map`** by anchored signature search rather than
