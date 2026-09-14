@@ -12,6 +12,33 @@ number that looks right cannot be spotted afterwards.
 
 ## Quick start
 
+One script does the whole thing — dependencies, game data, the manual, the wiki
+mirror and the video fetcher. Everything, by default, and safe to re-run.
+
+Budget about 35 minutes: the wiki mirror is the slow part. `--minimal` skips
+all three libraries and finishes in a couple of minutes; `--ask` lets you pick.
+
+```bash
+# Linux and macOS
+./scripts/install.sh
+
+# Windows, in PowerShell
+powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
+```
+
+`-ExecutionPolicy Bypass` applies to that one process only; Windows blocks
+downloaded scripts by default and this does not change any system setting.
+
+| | |
+|---|---|
+| *(no flags)* | everything — assistant and all three libraries |
+| `--minimal` / `-Minimal` | just the assistant, ~2 minutes |
+| `--ask` / `-Ask` | choose each library |
+| `--start` / `-Start` | start the server when finished |
+
+<details>
+<summary>Or do it by hand</summary>
+
 ```bash
 uv sync --extra web --extra dev
 uv run python -m dom6_assistant.reference.build_db --refresh
@@ -43,6 +70,8 @@ uv sync --extra videos && uv run dom6-assistant video-add <youtube url>
 
 Skip any of them and the assistant simply says that source was unavailable
 rather than inventing what it would have said.
+
+</details>
 
 [RUNNING.md](RUNNING.md) covers this properly, including Windows, pointing it at
 a model, and what each page is for.
