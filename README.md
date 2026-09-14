@@ -44,6 +44,11 @@ a model, and what each page is for.
   arithmetic transcribed from the game's own routines.
 - **Talks about the game** with no save loaded, for comparing nations before
   committing to one.
+- **Cites the manual.** Illwinter's own documentation, indexed locally and
+  searchable by rule, answering with the page number you can turn to.
+- **Watches strategy videos, sort of.** Transcripts of videos you add, searched
+  by timestamp, answering with a link to the moment. Ranked below the manual on
+  purpose: a guide is one opinion, usually about an older edition.
 
 Three workspaces — Live turn, Pretender design, Open chat — each with its own
 tool registry, chat library, and character bindings.
@@ -64,8 +69,10 @@ else depends on it.
 
 The reference data is Illwinter's, not mine to redistribute, so the build step
 above fetches and assembles it locally. The same goes for the strategy wiki
-mirror, which is optional. Tests that need data you have not built will say so
-and skip.
+mirror, for Illwinter's freely published manual, and for any video transcripts
+you add -- all optional, and each downloaded onto your machine and indexed
+there, never shipped here. Transcripts belong to the people who recorded them. Tests that
+need data you have not built will say so and skip.
 
 ## Licence
 

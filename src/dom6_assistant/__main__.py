@@ -321,6 +321,84 @@ def wiki_scrape(
         )
 
 
+@main.command("video-add")
+@click.argument("url")
+def video_add(url: str) -> None:
+    """Index a YouTube strategy video's transcript for offline search.
+
+    Transcripts belong to the people who made the videos, so they are fetched
+    onto this machine and indexed here, never redistributed.
+    """
+    from dom6_assistant.videos.index import VideoError, add_video
+
+    try:
+        result = add_video(url)
+    except (OSError, VideoError, sqlite3.Error) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"  {result['title'] or result['video_id']}")
+    click.echo(f"    {result['chunks']} chunks, {result['subtitles']} captions")
+
+
+@main.command("video-list")
+def video_list() -> None:
+    """Which video transcripts are indexed."""
+    from dom6_assistant.videos.index import VideoError, list_videos
+
+    try:
+        result = list_videos()
+    except VideoError as exc:
+        raise click.ClickException(str(exc)) from exc
+    for row in result["videos"]:
+        click.echo(f"  {row['id']}  {row['chunks']:>4} chunks  "
+                   f"{(row['title'] or '')[:54]}")
+    click.echo(f"  {result['count']} video(s)")
+
+
+@main.command("video-remove")
+@click.argument("url")
+def video_remove(url: str) -> None:
+    """Drop a video from the index."""
+    from dom6_assistant.videos.index import VideoError, remove_video
+
+    try:
+        result = remove_video(url)
+    except (VideoError, sqlite3.Error) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"  removed {result['video_id']} ({result['removed_chunks']} chunks)")
+
+
+@main.command("manual-fetch")
+@click.option("--force", is_flag=True, help="re-download even if present")
+def manual_fetch(force: bool) -> None:
+    """Download Illwinter's Dominions 6 manual for local reference.
+
+    The manual is Illwinter's, freely published and not ours to redistribute,
+    so it is fetched onto this machine rather than shipped with the source.
+    """
+    from dom6_assistant.manual.index import ManualError, fetch
+
+    try:
+        result = fetch(force=force)
+    except (OSError, ManualError) as exc:
+        raise click.ClickException(str(exc)) from exc
+    state = "downloaded" if result["downloaded"] else "already present"
+    click.echo(f"  {state}: {result['path']} "
+               f"({result['bytes'] / 1_048_576:.1f} MiB)")
+
+
+@main.command("manual-build")
+def manual_build() -> None:
+    """Index the fetched manual for page-cited search."""
+    from dom6_assistant.manual.index import ManualError, build
+
+    try:
+        result = build()
+    except (OSError, ManualError, sqlite3.Error) as exc:
+        raise click.ClickException(str(exc)) from exc
+    click.echo(f"  {result['pages']} pages, {result['sections']} sections "
+               f"-> {result['database']}")
+
+
 @main.command("wiki-build")
 @click.option(
     "--mirror", "mirror_dir", type=click.Path(exists=True, file_okay=False, path_type=Path),

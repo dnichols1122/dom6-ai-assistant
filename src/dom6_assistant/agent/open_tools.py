@@ -223,6 +223,10 @@ def register(registry: ToolRegistry | None = None,
 
     from dom6_assistant.agent import wiki_tools
     wiki_tools.register(reg, wiki_db or DEFAULT_INDEX_DB)
+    from dom6_assistant.agent import manual_tools
+    manual_tools.register(reg)
+    from dom6_assistant.agent import video_tools
+    video_tools.register(reg)
     return reg
 
 

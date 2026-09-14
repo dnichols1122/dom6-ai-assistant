@@ -23,6 +23,12 @@ anthropic = ["anthropic>=0.40"]
 openai    = ["openai>=1.50"]
 gemini    = ["google-generativeai>=0.8"]
 ollama    = ["ollama>=0.4"]
+# Reading Illwinter's manual locally. Pure Python, so it works on Windows
+# without poppler, which is where most Dominions players are.
+manual    = ["pypdf>=5.0"]
+# Strategy-video transcripts. Only needed to *fetch* them; searching an
+# index you already built needs nothing extra.
+videos    = ["yt-dlp>=2025.1"]
 web = [
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",

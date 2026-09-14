@@ -3300,6 +3300,10 @@ def register(reg: ToolRegistry) -> ToolRegistry:
 
     from dom6_assistant.agent import wiki_tools
     wiki_tools.register(reg)
+    from dom6_assistant.agent import manual_tools
+    manual_tools.register(reg)
+    from dom6_assistant.agent import video_tools
+    video_tools.register(reg)
     return reg
 
 

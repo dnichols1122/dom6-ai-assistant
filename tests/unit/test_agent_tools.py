@@ -710,7 +710,7 @@ def test_live_verification_snapshot_is_exact_and_model_free(session):
     audit = _verification_snapshot(session)
     assert audit["turn"] == 30
     assert audit["source"]["model_contacted"] is False
-    assert len(audit["tool_catalog"]) == len(session.registry) == 76
+    assert len(audit["tool_catalog"]) == len(session.registry) == 83
     assert {section["id"] for section in audit["sections"]} >= {
         "orientation",
         "map",
@@ -1653,6 +1653,16 @@ def test_notes_persist_and_read_back(session):
 #: by their own tests above rather than run here.
 SMOKE: dict[str, dict] = {
     "search_illwiki": {"query": "blood fire", "limit": 3},
+    # The manual is fetched per-machine and may not be built here; the smoke
+    # call proves the tool is wired and answers, whether that answer is a hit
+    # or an explained refusal.
+    "search_manual": {"query": "widgets", "limit": 3},
+    "read_manual_page": {"page": 2},
+    "list_manual_sections": {"search": "widget"},
+    "search_videos": {"query": "expansion", "limit": 3},
+    "read_video_segment": {"video_id": "aaaaaaaaaaa", "start_seconds": 0},
+    "list_videos": {},
+    "add_video": {"url": "aaaaaaaaaaa"},
     "read_illwiki_page": {"page_id": "dom6:abysia-ma", "section": "magic access"},
     "get_turn_summary": {},
     "list_provinces": {},
@@ -3134,6 +3144,65 @@ def test_diplomacy_writer_refuses_no_contact_and_defeated_nations(diplomacy_stat
     assert "defeated" in defeated["error"]
 
 
+
+# --- optional corpora -------------------------------------------------------
+# The manual and the video library are fetched per machine and are not in the
+# repository. Pointing the smoke calls at the developer's own copies would pass
+# here and fail on every fresh clone, so each builds a tiny index of its own.
+
+_MANUAL_TOOLS = {"search_manual", "read_manual_page", "list_manual_sections"}
+_VIDEO_TOOLS = {"search_videos", "read_video_segment", "list_videos", "add_video"}
+
+
+def _manual_smoke_call(name, args, tmp_path):
+    from dom6_assistant.agent import manual_tools
+    from dom6_assistant.agent.registry import ToolRegistry
+    from dom6_assistant.manual import index as manual_index
+
+    pages = ["Widgets 2\n  Gadgets 3", "supplies and widgets\n2",
+             "gadgets and supplies\n3"]
+    database = tmp_path / "manual.sqlite3"
+    pdf = tmp_path / "m.pdf"
+    pdf.write_bytes(b"%PDF-1.4 fixture")
+    real_extract = manual_index.extract_pages
+    real_parse = manual_index.parse_contents
+    manual_index.extract_pages = lambda _: pages
+    manual_index.parse_contents = lambda p, **kw: real_parse(p, scan=1, minimum=2)
+    try:
+        manual_index.build(pdf=pdf, database_path=database)
+    finally:
+        manual_index.extract_pages = real_extract
+        manual_index.parse_contents = real_parse
+    reg = manual_tools.register(ToolRegistry(), database_path=database)
+    return reg.call(None, name, args)
+
+
+def _video_smoke_call(name, args, tmp_path):
+    from dom6_assistant.agent import video_tools
+    from dom6_assistant.agent.registry import ToolRegistry
+    from dom6_assistant.videos import index as video_index
+
+    database = tmp_path / "videos.sqlite3"
+
+    def fake_fetch(video_id):
+        meta = {"id": video_id,
+                "url": f"https://www.youtube.com/watch?v={video_id}",
+                "title": "Fixture guide", "channel": "Fixture",
+                "duration": 180, "subtitles": "authored", "language": "en"}
+        cues = [video_index.Cue(start=float(t), text="expansion and smiths")
+                for t in (0, 30, 60, 90, 120)]
+        return meta, cues
+
+    real_fetch = video_index.fetch_transcript
+    video_index.fetch_transcript = fake_fetch
+    try:
+        video_index.add_video("aaaaaaaaaaa", database_path=database)
+        reg = video_tools.register(ToolRegistry(), database_path=database)
+        return reg.call(None, name, args)
+    finally:
+        video_index.fetch_transcript = real_fetch
+
+
 @pytest.mark.parametrize("name", sorted(SMOKE))
 def test_tool_smoke(session, name, tmp_path):
     """Each tool returns successfully on a call it should accept.
@@ -3172,7 +3241,11 @@ def test_tool_smoke(session, name, tmp_path):
                 "summary": "smoke turn",
                 "outstanding_risks": "none identified",
             }))
-    if name == "change_shape":
+    if name in _MANUAL_TOOLS:
+        result = _manual_smoke_call(name, args, tmp_path)
+    elif name in _VIDEO_TOOLS:
+        result = _video_smoke_call(name, args, tmp_path)
+    elif name == "change_shape":
         shape_session = _shape_session_on(tmp_path, SHAPE_CHANGED_STATE)
         try:
             result = shape_session.call(name, args)

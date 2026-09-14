@@ -35,6 +35,12 @@ RUNNING.public.md
 # Staging directory for the public snapshot, if built in place.
 *-public/
 
+# Illwinter's manual: fetched locally, never redistributed.
+knowledge/manual/
+
+# Transcripts belong to the people who made the videos.
+knowledge/videos/
+
 # --- created by running the assistant, never committed ---------------------
 knowledge/
 dom6-assistant.toml

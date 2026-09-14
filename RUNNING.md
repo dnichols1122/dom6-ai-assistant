@@ -53,7 +53,67 @@ uv run python -m dom6_assistant.reference.build_index
 # A local mirror of the community strategy wiki. Polite, resumable, ~30 min.
 uv run dom6-assistant wiki-scrape
 uv run dom6-assistant wiki-build
+
+# Illwinter's manual, indexed for page-cited search. ~18 MB, about a minute.
+uv sync --extra manual
+uv run dom6-assistant manual-fetch
+uv run dom6-assistant manual-build
 ```
+
+The manual gives the assistant `search_manual`, `read_manual_page` and
+`list_manual_sections` in all three workspaces. Answers come back as short
+excerpts with the printed page number, so you can check any rule it cites
+against the page in your own copy. It is the game's own documentation, so it
+outranks the community wiki on rules -- though a live game tool still outranks
+both for what is true in your game right now.
+
+`--extra manual` installs a PDF reader. It is pure Python, so it needs nothing
+from your system; if you already have poppler's `pdftotext`, that is used
+instead and the extra is unnecessary.
+
+```bash
+# Strategy videos, indexed by transcript and searchable by timestamp.
+uv sync --extra videos
+uv run dom6-assistant video-add https://www.youtube.com/watch?v=...
+uv run dom6-assistant video-list
+```
+
+You can also paste a YouTube link into a conversation and ask the assistant to
+index it; `add_video` does the same thing mid-chat. Only YouTube addresses are
+accepted, deliberately -- a tool that took any URL would be a general web
+fetcher, which is not what this is.
+
+Hits come back with a timestamp and a link that opens the video at that moment,
+so you can check anything the assistant claims a video said.
+
+### What the sources are worth
+
+The assistant can consult four kinds of source, and they do not carry equal
+weight. In descending order:
+
+| Source | Good for | Trust |
+|---|---|---|
+| The live game tools | what is true in *your* game this turn | authoritative |
+| The manual | the rules in general | Illwinter's own, authoritative on rules |
+| The community wiki | mechanics and nation write-ups | secondary, sometimes stale |
+| Video transcripts | plans, openings, what a nation is *for* | weakest: one opinion, often an older edition |
+
+The tool descriptions say this too, so a model that reads them ranks its
+sources the same way rather than treating a YouTube aside as a rule.
+
+Two things to know about transcripts specifically. Automatic captions mangle
+Dominions vocabulary -- nation names and jargon come back wrong, so a search
+can miss a topic the video genuinely covers. And a transcript is *speech only*:
+anything conveyed as text on screen is simply absent, which in a UI-heavy guide
+can be most of the substance.
+
+### Model capabilities
+
+Everything above is text, so it works on any backend, including a local model
+with no vision. But the harness does not pretend all models are equal: if you
+point it at a text-only model you will not get features that need image input,
+and nothing here will substitute for that. Choosing the model is your call, and
+so are its limits.
 
 ### Point it at a model
 

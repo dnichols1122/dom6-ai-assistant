@@ -486,6 +486,15 @@ def test_pretender_workspace_exposes_nations_and_separate_tools():
         "create_pretender",
         "search_illwiki",
         "read_illwiki_page",
+        # Reference sources, all three workspaces. Ranked in their own
+        # descriptions: manual over wiki over video guide.
+        "search_manual",
+        "read_manual_page",
+        "list_manual_sections",
+        "search_videos",
+        "read_video_segment",
+        "list_videos",
+        "add_video",
     }
 
 
