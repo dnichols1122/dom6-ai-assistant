@@ -1,0 +1,123 @@
+#!/usr/bin/env bpftrace
+/*
+ * trn_trace.bt — structural tracer for the dom6_amd64 .trn serializer
+ *
+ * Instruments the serializer sub-functions using uprobes.  For every
+ * section written during end-turn, prints:
+ *   - Which function handled it
+ *   - Its arguments (province index, nation ID, etc.)
+ *   - The current byte offset in the output buffer
+ *
+ * Must be run as root with the game process already running:
+ *   sudo bpftrace -p $(pgrep -f dom6_amd64) src/hooks/trn_trace.bt \
+ *     > /tmp/trn_trace.log
+ *
+ * Then end the turn in-game.  Ctrl-C after the turn completes.
+ *
+ * Known serializer RVAs (confirmed via disassembly, prior session):
+ *   0x3448c0  main serializer        (nation_id:di, FILE*:si)
+ *   0x34b2a0  file header writer     (FILE*:di)
+ *   0x34c5e0  nation block writer    (nation_id:di, slot:si, FILE*:dx, flag:cx)
+ *   0x34c370  province serializer    (province_idx:di, FILE*:si)
+ *   0x34dbb0  nation econ block      (nation_id:di, FILE*:si)
+ *   0x34e220  commander/entity       (ptr:di, FILE*:si)
+ *   0x54c940  XOR string writer      (char*:di, stream:si)
+ *   0x54ce10  int16 write primitive  (value:di, stream:si)
+ *   0x54d240  byte  write primitive  (value:di, stream:si)
+ */
+
+BEGIN {
+    printf("# dom6 .trn structural tracer ready\n");
+    printf("# format: OFFSET  SECTION  DETAILS\n");
+    @tracing = (uint64)0;
+    @pos     = (uint64)0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Main serializer — gate all other probes on this                    */
+/* ------------------------------------------------------------------ */
+
+uprobe:~/.steam/steam/steamapps/common/Dominions6/dom6_amd64:0x3448c0 {
+    @tracing = tid;
+    @pos     = 0;
+    printf("SERIALIZER_START nation_id=%d\n", (int32)reg("di"));
+}
+
+uretprobe:~/.steam/steam/steamapps/common/Dominions6/dom6_amd64:0x3448c0 {
+    if (@tracing == tid) {
+        printf("SERIALIZER_END total_bytes=%llu\n", @pos);
+        @tracing = 0;
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* High-level section probes (guarded by @tracing)                    */
+/* ------------------------------------------------------------------ */
+
+uprobe:~/.steam/steam/steamapps/common/Dominions6/dom6_amd64:0x34b2a0 {
+    if (@tracing == tid) {
+        printf("0x%06llx  HEADER_WRITER\n", @pos);
+    }
+}
+
+uprobe:~/.steam/steam/steamapps/common/Dominions6/dom6_amd64:0x34c5e0 {
+    if (@tracing == tid) {
+        printf("0x%06llx  NATION_BLOCK nation_id=%d slot=%d flag=%d\n",
+               @pos, (int32)reg("di"), (int32)reg("si"),
+               (int32)reg("cx"));
+    }
+}
+
+uprobe:~/.steam/steam/steamapps/common/Dominions6/dom6_amd64:0x34c370 {
+    if (@tracing == tid) {
+        printf("0x%06llx  PROVINCE province_idx=%d\n",
+               @pos, (int32)reg("di"));
+    }
+}
+
+uprobe:~/.steam/steam/steamapps/common/Dominions6/dom6_amd64:0x34dbb0 {
+    if (@tracing == tid) {
+        printf("0x%06llx  NATION_ECON nation_id=%d\n",
+               @pos, (int32)reg("di"));
+    }
+}
+
+uprobe:~/.steam/steam/steamapps/common/Dominions6/dom6_amd64:0x34e220 {
+    if (@tracing == tid) {
+        printf("0x%06llx  COMMANDER ptr=0x%llx\n",
+               @pos, reg("di"));
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Write primitives — update position counter + log strings           */
+/* ------------------------------------------------------------------ */
+
+uprobe:~/.steam/steam/steamapps/common/Dominions6/dom6_amd64:0x54d240 {
+    if (@tracing == tid) {
+        @pos += 1;
+    }
+}
+
+uprobe:~/.steam/steam/steamapps/common/Dominions6/dom6_amd64:0x54ce10 {
+    if (@tracing == tid) {
+        @pos += 2;
+    }
+}
+
+uprobe:~/.steam/steam/steamapps/common/Dominions6/dom6_amd64:0x54c940 {
+    if (@tracing == tid) {
+        /* Log the raw string (pre-XOR encoding) before advancing position.
+         * strlen+1 accounts for the null terminator written as 0x4F. */
+        $s   = str(reg("di"), 64);
+        $len = strlen($s) + 1;
+        printf("0x%06llx  XSTR[%llu] \"%s\"\n", @pos, $len, $s);
+        @pos += $len;
+    }
+}
+
+/* ------------------------------------------------------------------ */
+/* Calibration: catch any write-size drift vs the real output.        */
+/* If the total in SERIALIZER_END doesn't match the actual file size  */
+/* (~159 KB), there are write primitives we haven't instrumented yet. */
+/* ------------------------------------------------------------------ */

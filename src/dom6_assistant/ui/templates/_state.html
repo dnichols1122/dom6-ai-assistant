@@ -1,0 +1,193 @@
+{% macro cmark(kind) -%}
+  <span class="c-{{ conf.get(kind, 'guess') }}" title="{{ conf.get(kind, 'guess') }}">●</span>
+{%- endmacro %}
+
+{% if not game or not turn %}
+  <div class="empty">
+    <h1>Nothing ingested yet</h1>
+    <p>Run <code>python -m dom6_assistant.gamestate.ingest &lt;path-to.trn&gt;</code>
+       or <code>--scan</code> to load every saved game.</p>
+  </div>
+{% else %}
+
+<h1>{{ game.name }}
+  <span class="pill">turn {{ turn.turn }}</span>
+  {% if nation %}<span class="pill pill-nation">{{ nation.name }}, {{ nation.epithet }}</span>{% endif %}
+</h1>
+
+<div class="grid">
+
+  <section class="card">
+    <h2>Army <span class="dim">{{ army_size }} units · {{ army_total }}g of troops</span></h2>
+    <table>
+      <thead><tr><th>#</th><th>Unit</th><th>Type</th><th>Gold</th><th>HP</th><th>Age</th></tr></thead>
+      <tbody>
+      {% for u in army %}
+        <tr>
+          <td class="num">{{ u.n }}</td>
+          <td>{{ u.unit_name or '?' }} {{ cmark('unit_name') }}</td>
+          <td class="num dim">{{ u.type_id }} {{ cmark('type_id') }}</td>
+          <td class="num">{% if u.gold %}{{ u.gold * u.n }}{% else %}<span class="dim">—</span>{% endif %}</td>
+          <td class="num">{{ u.hp_min }}{% if u.hp_max != u.hp_min %}–{{ u.hp_max }}{% endif %} {{ cmark('hp') }}</td>
+          <td class="num">{{ u.age_min }}{% if u.age_max != u.age_min %}–{{ u.age_max }}{% endif %} {{ cmark('age') }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Gems <span class="dim">stock</span>
+        {% if gems and gems.gold is not none %}
+          <span class="gold">{{ '{:,}'.format(gems.gold) }} gold {{ cmark('treasury') }}</span>
+        {% endif %}</h2>
+    {% if gems %}
+      <div class="gems">
+      {% for k in ['fire','air','water','earth','astral','death','nature','glamour','blood'] %}
+        {% set v = gems['gems_' ~ k] %}
+        <div class="gem {% if not v %}zero{% endif %}"><b>{{ v or 0 }}</b><span>{{ k }}</span></div>
+      {% endfor %}
+      </div>
+      {% if gem_income %}
+      <h3>Income <span class="dim">per turn, from magic sites you hold</span></h3>
+      <div class="gems">
+      {% for k, col in [('fire','f'),('air','a'),('water','w'),('earth','e'),
+                        ('astral','s'),('death','d'),('nature','n'),
+                        ('glamour','g'),('blood','b')] %}
+        {% set v = gem_income[col] %}
+        <div class="gem {% if not v %}zero{% endif %}"><b>{{ v or 0 }}</b><span>{{ k }}</span></div>
+      {% endfor %}
+      </div>
+      <p class="note">Income is summed from the sites in provinces you own,
+        using each site's yield from the game's own data — so it is derived
+        from the file rather than guessed. Next turn the stock above should
+        equal this turn's stock plus this income.</p>
+      {% endif %}
+    {% else %}<p class="dim">not located for this turn</p>{% endif %}
+  </section>
+
+  <section class="card wide">
+    <h2>My provinces <span class="dim">{{ provinces|length }} owned · {{ visible_count }} others visible</span></h2>
+    <table>
+      <thead><tr><th>Province</th><th>Terrain</th><th>Pop</th><th>PD</th><th>Unrest</th><th>Dom</th><th>Scales</th><th>Sites &amp; buildings</th><th>Borders</th></tr></thead>
+      <tbody>
+      {% for p in provinces %}
+        <tr>
+          <td>{{ p.name }}{% if p.is_capital %} <span class="pill pill-cap">capital</span>{% endif %}
+              <span class="dim">#{{ p.province_id }}</span></td>
+          <td>{{ p.terrain }} {{ cmark('terrain') }}</td>
+          <td class="num">{{ '{:,}'.format(p.population or 0) }} {{ cmark('population') }}</td>
+          <td class="num">{{ p.province_defense }} {{ cmark('province_defense') }}</td>
+          <td class="num">{{ p.unrest }}</td>
+          <td class="num">{{ p.dominion_strength }}</td>
+          <td class="scales">
+            {%- for lbl, v in [('ord',p.order_scale),('prod',p.productivity_scale),
+                               ('heat',p.heat_scale),('grow',p.growth_scale),
+                               ('luck',p.luck_scale),('mag',p.magic_scale)] %}
+              <span class="{% if v > 0 %}pos{% elif v < 0 %}neg{% else %}dim{% endif %}">{{ lbl }} {{ '%+d' % v }}</span>
+            {%- endfor %}
+          </td>
+          <td class="sites">
+            {%- if p.fort_type %}<span class="pill">fort {{ p.fort_type }}</span>{% endif %}
+            {%- if p.has_laboratory %}<span class="pill">lab</span>{% endif %}
+            {%- if p.has_temple %}<span class="pill">temple</span>{% endif %}
+            {%- for st in p.sites %}
+              <div class="site">{{ st.name }}
+                <span class="dim">{% for k in ['F','A','W','E','S','D','N','G','B'] %}{% if st[k] %}{{ k }}{{ st[k] }} {% endif %}{% endfor %}</span>
+              </div>
+            {%- endfor %}
+            {{ cmark('sites') }}
+          </td>
+          <td class="links">
+            {%- for l in p.links %}
+              <span class="link{% if l.border %} blocked{% endif %}"
+                    title="{{ borders.get(l.border, 'open border') if l.border else 'open border' }}">
+                {{ l.name or '?' }} <span class="dim">#{{ l.id }}</span>
+              </span>
+            {%- endfor %}
+            {{ cmark('neighbours') }}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="note"><b>Not in the .trn:</b>
+      {% for label, val in not_stored %}{{ label }} ({{ val }}){% if not loop.last %}, {% endif %}{% endfor %}.
+      None of these five values appears anywhere in the file, so the game
+      computes them at display time. Showing a reconstruction would be a guess,
+      which is the thing this tool exists to remove — so they are left out.</p>
+  </section>
+
+  {% if live %}
+  <section class="card wide">
+    <h2>Research <span class="dim">{{ live.research_points }} rp total</span></h2>
+    <table>
+      <thead><tr><th>School</th><th>Level</th><th>Into next</th></tr></thead>
+      <tbody>
+      {% for name, lvl, prog in live.schools %}
+        <tr><td>{{ name }}</td><td class="num">{{ lvl }}</td>
+            <td class="num">{{ prog or '' }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card wide">
+    <h2>Mercenaries for hire</h2>
+    {% if live.mercenaries %}
+    <table>
+      <thead><tr><th>Company</th><th>Price</th><th>Troops</th></tr></thead>
+      <tbody>
+      {% for m in live.mercenaries %}
+        <tr><td>{{ m.name }}</td><td class="num">{{ m.price }}g</td>
+            <td class="num">{{ m.unit_count }} &times; type {{ m.unit_type_id }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<p class="dim">none on offer</p>{% endif %}
+  </section>
+
+  <section class="card wide">
+    <h2>Hall of Fame <span class="dim">in game order</span></h2>
+    <ol class="hof">
+      {% for cid, nm in live.hall_of_fame %}<li>{{ nm }} <span class="dim">#{{ cid }}</span></li>{% endfor %}
+    </ol>
+  </section>
+
+  <section class="card wide">
+    <h2>Pretenders</h2>
+    <table>
+      <thead><tr><th>Name</th><th>Title</th></tr></thead>
+      <tbody>
+      {% for nm, title in live.titles.items() %}
+        <tr><td>{{ nm }}</td><td class="dim">{{ title }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+
+  <section class="card wide">
+    <h2>Nations in this game <span class="dim">from the per-nation records</span></h2>
+    <table>
+      <thead><tr><th>Nation</th><th>Era</th><th>ID</th><th>Gold</th><th>Capital</th></tr></thead>
+      <tbody>
+      {% for n in roster %}
+        <tr {% if n.nation_id == game.nation_id %}class="me"{% endif %}>
+          <td>{{ n.name or '?' }}{% if n.nation_id == game.nation_id %}
+              <span class="pill pill-cap">you</span>{% endif %}</td>
+          <td class="dim">{{ {1:'Early',2:'Mid',3:'Late'}.get(n.era, '?') }}</td>
+          <td class="num dim">{{ n.nation_id }}</td>
+          <td class="num">{{ '{:,}'.format(n.gold or 0) }}</td>
+          <td>{% for r in rivals %}{% if r.owner_nation_id == n.nation_id %}{{ r.name }}{% endif %}{% endfor %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="note">Capitals are blank for nations we have not scouted — the
+      .trn does not tell us who owns them yet, and the roster is the player
+      list rather than intelligence about it.</p>
+  </section>
+
+</div>
+{% endif %}

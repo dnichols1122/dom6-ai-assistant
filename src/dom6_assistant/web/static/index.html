@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dominions 6 Assistant</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="h-full bg-gray-950 text-gray-100 flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-gray-900 border-b border-gray-800 px-6 py-3 flex items-center justify-between shrink-0">
+    <span class="text-amber-400 font-bold tracking-widest text-sm uppercase">Dominions 6 Assistant</span>
+    <div id="header-status" class="flex items-center gap-2 text-sm">
+      <span id="status-dot" class="w-2 h-2 rounded-full bg-gray-600"></span>
+      <span id="status-text" class="text-gray-400">Checking…</span>
+    </div>
+  </header>
+
+  <!-- Body: sidebar + main -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- Sidebar -->
+    <nav class="bg-gray-900 border-r border-gray-800 w-44 shrink-0 flex flex-col p-3 gap-1 pt-4">
+      <button class="tab-btn active" data-tab="overview">Overview</button>
+      <button class="tab-btn"        data-tab="memory">Memory</button>
+      <button class="tab-btn"        data-tab="journal">Journal</button>
+      <button class="tab-btn"        data-tab="trndiff">TRN Diff</button>
+      <button class="tab-btn"        data-tab="chat">AI Chat</button>
+      <button class="tab-btn"        data-tab="settings">Settings</button>
+      <!-- The assistant is a page of its own rather than a tab: it streams
+           tool calls and their results, which needs the whole width. -->
+      <a href="/agent" class="tab-btn" style="display:block;text-align:left;
+         text-decoration:none;margin-top:auto;color:#fbbf24">Assistant →</a>
+      <a href="/verify" class="tab-btn" style="display:block;text-align:left;
+         text-decoration:none;color:#93c5fd">Verify agent view →</a>
+    </nav>
+
+    <!-- Main content -->
+    <main class="flex-1 overflow-hidden flex flex-col">
+
+      <!-- ═══ OVERVIEW ═══ -->
+      <div id="tab-overview" class="tab-panel overflow-auto p-6 space-y-4">
+        <h2 class="text-amber-400 font-semibold text-sm uppercase tracking-wider">Overview</h2>
+
+        <!-- Process card -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-2">
+          <div class="text-xs text-gray-500 uppercase tracking-wider mb-3">Process</div>
+          <div class="grid grid-cols-2 gap-2 text-sm">
+            <span class="text-gray-400">Status</span>
+            <span id="ov-status" class="font-mono">—</span>
+            <span class="text-gray-400">PID</span>
+            <span id="ov-pid"    class="font-mono text-gray-300">—</span>
+            <span class="text-gray-400">Binary</span>
+            <span id="ov-name"   class="font-mono text-gray-300">—</span>
+            <span class="text-gray-400">RSS Memory</span>
+            <span id="ov-rss"    class="font-mono text-gray-300">—</span>
+          </div>
+        </div>
+
+        <!-- Memory summary card -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <div class="text-xs text-gray-500 uppercase tracking-wider mb-3">Key Memory Regions</div>
+          <div id="ov-regions" class="text-sm text-gray-400">Loading…</div>
+        </div>
+
+        <!-- Game state card -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-gray-500 uppercase tracking-wider">Nation Economic State</div>
+            <span id="gs-address" class="text-xs font-mono text-gray-600"></span>
+          </div>
+          <div id="gs-unlocked" class="text-sm text-gray-500">
+            No address locked. Scan for your current gold value in the Memory tab,
+            then click <span class="text-amber-400">Lock as game state</span> on the correct address.
+          </div>
+          <div id="gs-locked" class="hidden grid grid-cols-2 gap-2 text-sm">
+            <span class="text-gray-400">Gold</span>
+            <span id="gs-gold" class="font-mono text-amber-300">—</span>
+            <span class="text-gray-400">Nation ID</span>
+            <span id="gs-nation-id" class="font-mono text-gray-300">—</span>
+            <span class="text-gray-400 col-span-2 mt-1 text-xs uppercase tracking-wider border-t border-gray-800 pt-2">Gems</span>
+            <span class="text-gray-400">Fire</span>     <span id="gs-gem-fire"    class="font-mono text-orange-400">—</span>
+            <span class="text-gray-400">Air / Wind</span> <span id="gs-gem-air"  class="font-mono text-sky-400">—</span>
+            <span class="text-gray-400">Astral</span>  <span id="gs-gem-astral"  class="font-mono text-purple-400">—</span>
+            <span class="text-gray-400">Water</span>      <span id="gs-gem-water"  class="font-mono text-blue-400">—</span>
+            <span class="text-gray-400">Nature</span>     <span id="gs-gem-nature" class="font-mono text-green-400">—</span>
+            <span class="text-gray-400">Earth</span>  <span id="gs-gem-earth" class="font-mono text-yellow-700">—</span>
+            <span class="text-gray-400">Death</span>  <span id="gs-gem-death" class="font-mono text-gray-500">—</span>
+            <span class="text-gray-400">Glamour</span> <span id="gs-gem-glamour" class="font-mono text-pink-400">—</span>
+            <span class="text-gray-400">Blood</span>  <span id="gs-gem-blood" class="font-mono text-red-700">—</span>
+            <span class="col-span-2 text-xs text-gray-600">Earth/Death/Blood memory slot order unconfirmed</span>
+          </div>
+        </div>
+
+        <!-- Scan state card -->
+        <div class="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <div class="text-xs text-gray-500 uppercase tracking-wider mb-3">Active Scan</div>
+          <div id="ov-scan" class="text-sm text-gray-400">No scan running.</div>
+        </div>
+      </div>
+
+      <!-- ═══ MEMORY ═══ -->
+      <div id="tab-memory" class="tab-panel hidden overflow-auto p-6 space-y-6">
+        <h2 class="text-amber-400 font-semibold text-sm uppercase tracking-wider">Memory Explorer</h2>
+
+        <!-- Maps -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-gray-500 uppercase tracking-wider">Memory Maps</span>
+            <div class="flex items-center gap-2">
+              <input id="maps-filter" type="text" placeholder="Filter by path…"
+                class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-300 w-44 focus:outline-none focus:border-amber-500">
+              <label class="flex items-center gap-1 text-xs text-gray-400 cursor-pointer select-none">
+                <input id="maps-rw-only" type="checkbox" class="accent-amber-400"> rw only
+              </label>
+              <button id="maps-refresh-btn" class="btn-sm">Refresh</button>
+            </div>
+          </div>
+          <div class="scroll-panel">
+            <table class="maps-table w-full">
+              <thead><tr>
+                <th>Start</th><th>End</th><th class="text-right">Size</th><th>Perms</th><th>Path</th>
+              </tr></thead>
+              <tbody id="maps-tbody" class="mono text-gray-300">
+                <tr><td colspan="5" class="text-gray-500 py-4 text-center">Click Refresh to load.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div id="maps-count" class="text-xs text-gray-600"></div>
+        </section>
+
+        <!-- Scanner -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
+          <span class="text-xs text-gray-500 uppercase tracking-wider">Value Scanner</span>
+
+          <div class="flex items-end gap-3 flex-wrap">
+            <div class="space-y-1">
+              <label class="text-xs text-gray-500">Value</label>
+              <input id="scan-value" type="number" placeholder="e.g. 350"
+                class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm w-32 focus:outline-none focus:border-amber-500">
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs text-gray-500">Type</label>
+              <select id="scan-type" class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500">
+                <option value="int32">int32</option>
+                <option value="uint32">uint32</option>
+                <option value="int16">int16</option>
+              </select>
+            </div>
+            <button id="scan-btn" class="btn-primary">Scan</button>
+            <span id="scan-status" class="text-xs text-gray-400"></span>
+          </div>
+
+          <!-- Narrow -->
+          <div class="flex items-end gap-3 flex-wrap">
+            <div class="space-y-1">
+              <label class="text-xs text-gray-500">New value (narrow)</label>
+              <input id="narrow-value" type="number" placeholder="Updated value"
+                class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm w-32 focus:outline-none focus:border-amber-500">
+            </div>
+            <button id="narrow-btn" class="btn-sm" disabled>Narrow</button>
+            <span id="narrow-status" class="text-xs text-gray-400"></span>
+          </div>
+
+          <!-- Results -->
+          <div id="scan-results" class="scroll-panel mono text-xs text-gray-400 space-y-0.5 hidden">
+          </div>
+        </section>
+
+        <!-- Hex Dump -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+          <span class="text-xs text-gray-500 uppercase tracking-wider">Hex Dump</span>
+          <div class="flex items-end gap-3 flex-wrap">
+            <div class="space-y-1">
+              <label class="text-xs text-gray-500">Address (0x…)</label>
+              <input id="hex-address" type="text" placeholder="0x55a3f098b000"
+                class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm font-mono w-52 focus:outline-none focus:border-amber-500">
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs text-gray-500">Size (bytes)</label>
+              <input id="hex-size" type="number" value="256" min="16" max="4096" step="16"
+                class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm w-24 focus:outline-none focus:border-amber-500">
+            </div>
+            <button id="hex-btn" class="btn-sm">Dump</button>
+          </div>
+          <pre id="hex-output" class="mono text-xs text-green-400 bg-gray-950 rounded p-3 overflow-auto max-h-80 hidden"></pre>
+          <div id="hex-error" class="text-xs text-red-400 hidden"></div>
+        </section>
+      </div>
+
+      <!-- ═══ JOURNAL ═══ -->
+      <div id="tab-journal" class="tab-panel hidden overflow-auto p-6 space-y-6">
+        <h2 class="text-amber-400 font-semibold text-sm uppercase tracking-wider">Game Journal</h2>
+
+        <!-- Turn record -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
+          <div class="text-xs text-gray-500 uppercase tracking-wider">Record Turn</div>
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-5">
+            <label class="cfg-label">Turn #<input id="j-turn" type="number" min="1" class="cfg-input"></label>
+            <label class="cfg-label">Treasury (start)<input id="j-treasury-start" type="number" class="cfg-input"></label>
+            <label class="cfg-label">Treasury (end)<input id="j-treasury-end" type="number" class="cfg-input"></label>
+            <label class="cfg-label">Total Income<input id="j-income" type="number" class="cfg-input"></label>
+            <label class="cfg-label">Upkeep<input id="j-upkeep" type="number" class="cfg-input"></label>
+          </div>
+          <div class="border-t border-gray-800 pt-3">
+            <div class="text-xs text-gray-500 mb-2">Gems <span class="text-gray-600 normal-case">(leave blank = not seen this turn)</span></div>
+            <div class="grid grid-cols-4 gap-2 sm:grid-cols-8">
+              <label class="cfg-label">Fire<input id="j-gem-fire"   type="number" min="0" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Air / Wind<input id="j-gem-air"    type="number" min="0" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Astral<input id="j-gem-astral" type="number" min="0" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Water<input id="j-gem-water" type="number" min="0" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Nature<input id="j-gem-nature" type="number" min="0" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Earth<input id="j-gem-earth" type="number" min="0" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Death<input id="j-gem-death" type="number" min="0" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Blood<input id="j-gem-blood" type="number" min="0" class="cfg-input" placeholder="—"></label>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <button id="j-save-turn-btn" class="btn-primary">Save Turn</button>
+            <span id="j-turn-status" class="text-xs text-gray-400"></span>
+          </div>
+        </section>
+
+        <!-- Memory Correlation -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-gray-500 uppercase tracking-wider">Memory Correlation</div>
+            <div class="flex gap-2">
+              <button id="corr-scan-btn" class="btn-sm">Scan Fields</button>
+              <button id="corr-refresh-btn" class="btn-sm">Refresh</button>
+            </div>
+          </div>
+          <p class="text-xs text-gray-600">
+            Gem snapshots are captured automatically when you save a turn (requires gold address locked).
+            After 2–3 turns with different gem counts, the Earth/Death/Blood ordering will resolve.
+            "Scan Fields" searches live memory for income &amp; upkeep — takes ~20 s; subsequent saves auto-narrow.
+          </p>
+          <span id="corr-status" class="text-xs text-amber-400"></span>
+
+          <!-- Gem mapping -->
+          <div>
+            <div class="text-xs text-gray-500 mb-1">Gem slot mapping</div>
+            <div id="corr-gems" class="text-xs font-mono text-gray-400 space-y-0.5">—</div>
+          </div>
+
+          <!-- Field correlations -->
+          <div>
+            <div class="text-xs text-gray-500 mb-1">Field addresses</div>
+            <div id="corr-fields" class="space-y-1.5"></div>
+          </div>
+        </section>
+
+        <!-- Province list -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-gray-500 uppercase tracking-wider">Provinces</div>
+            <button id="j-add-prov-btn" class="btn-sm">+ Add Province</button>
+          </div>
+
+          <!-- Add province form (hidden by default) -->
+          <div id="j-add-prov-form" class="hidden border border-gray-700 rounded p-3 space-y-2 bg-gray-800">
+            <div class="grid grid-cols-2 gap-3">
+              <label class="cfg-label col-span-2">Province Name<input id="j-prov-name" type="text" placeholder="e.g. Pangaea" class="cfg-input"></label>
+              <label class="cfg-label">Province # <span class="text-gray-600 normal-case">(if known)</span><input id="j-prov-number" type="number" min="1" class="cfg-input" placeholder="optional"></label>
+            </div>
+            <label class="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+              <input id="j-prov-capital" type="checkbox" class="accent-amber-400"> Capital province
+            </label>
+            <div class="flex gap-2">
+              <button id="j-prov-save-btn" class="btn-primary">Create</button>
+              <button id="j-prov-cancel-btn" class="btn-sm">Cancel</button>
+            </div>
+          </div>
+
+          <!-- Province cards -->
+          <div id="j-provinces" class="space-y-4">
+            <div class="text-sm text-gray-600">Loading…</div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ═══ TRN DIFF ═══ -->
+      <div id="tab-trndiff" class="tab-panel hidden overflow-auto p-6 space-y-6">
+        <h2 class="text-amber-400 font-semibold text-sm uppercase tracking-wider">TRN Format Analysis</h2>
+        <p class="text-xs text-gray-500">
+          Take snapshots of your .trn save file with known field values (gold, gems, etc.),
+          then diff and analyze them to map new byte offsets in the binary format.
+        </p>
+
+        <!-- Session selector -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+          <div class="text-xs text-gray-500 uppercase tracking-wider">Session</div>
+          <div class="flex items-end gap-3 flex-wrap">
+            <div class="space-y-1">
+              <label class="text-xs text-gray-500">Active session</label>
+              <select id="td-session-select"
+                class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-amber-500 w-52">
+                <option value="">— select or create —</option>
+              </select>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs text-gray-500">New session name</label>
+              <input id="td-session-name" type="text" placeholder="e.g. test_game_gold"
+                class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm w-44 focus:outline-none focus:border-amber-500">
+            </div>
+            <button id="td-create-session-btn" class="btn-primary">Create</button>
+            <span id="td-session-status" class="text-xs text-gray-400"></span>
+          </div>
+          <!-- Active session indicator -->
+          <div id="td-active-session-label" class="hidden text-xs text-amber-400 font-semibold pt-1"></div>
+          <!-- Snapshot list for active session -->
+          <div id="td-snapshot-list" class="hidden space-y-1 pt-1">
+            <div class="text-xs text-gray-500 mb-1">Snapshots in this session</div>
+            <div id="td-snapshot-items" class="text-xs font-mono text-gray-400 space-y-0.5"></div>
+          </div>
+        </section>
+
+        <!-- Take a snapshot -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+          <div class="text-xs text-gray-500 uppercase tracking-wider">Take Snapshot</div>
+          <p class="text-xs text-gray-600">Select a .trn file, give it a label, and enter the field values you can currently see in-game.</p>
+          <div class="flex items-end gap-3 flex-wrap">
+            <div class="space-y-1 flex-1 min-w-48">
+              <label class="text-xs text-gray-500">Save file</label>
+              <select id="td-save-select"
+                class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm w-full focus:outline-none focus:border-amber-500">
+                <option value="">Loading saves…</option>
+              </select>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs text-gray-500">Snapshot label</label>
+              <input id="td-snap-label" type="text" placeholder="e.g. baseline, after_ritual"
+                class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm w-40 focus:outline-none focus:border-amber-500">
+            </div>
+          </div>
+          <!-- Field values grid -->
+          <div class="space-y-1">
+            <div class="text-xs text-gray-500 mb-1">Known field values <span class="text-gray-600">(leave blank = not known / unchanged)</span></div>
+            <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
+              <label class="cfg-label">Gold<input id="td-f-gold"    type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Income<input id="td-f-income"  type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Upkeep<input id="td-f-upkeep"  type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Turn<input id="td-f-turn"    type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Fire<input id="td-f-fire"    type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Air<input id="td-f-air"     type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Water<input id="td-f-water"   type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Earth<input id="td-f-earth"   type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Astral<input id="td-f-astral"  type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Death<input id="td-f-death"   type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Nature<input id="td-f-nature"  type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Glamour<input id="td-f-glamour" type="number" class="cfg-input" placeholder="—"></label>
+              <label class="cfg-label">Blood<input id="td-f-blood"   type="number" class="cfg-input" placeholder="—"></label>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <button id="td-snap-btn" class="btn-primary">Save Snapshot</button>
+            <span id="td-snap-status" class="text-xs text-gray-400"></span>
+          </div>
+        </section>
+
+        <!-- Diff two snapshots -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+          <div class="text-xs text-gray-500 uppercase tracking-wider">Diff Two Snapshots</div>
+          <div class="flex items-end gap-3 flex-wrap">
+            <div class="space-y-1">
+              <label class="text-xs text-gray-500">Baseline (A)</label>
+              <select id="td-diff-a" class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm w-44 focus:outline-none focus:border-amber-500">
+                <option value="">— pick —</option>
+              </select>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs text-gray-500">Compare (B)</label>
+              <select id="td-diff-b" class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm w-44 focus:outline-none focus:border-amber-500">
+                <option value="">— pick —</option>
+              </select>
+            </div>
+            <div class="space-y-1">
+              <label class="text-xs text-gray-500">Min region size</label>
+              <input id="td-diff-minlen" type="number" value="1" min="1" max="16"
+                class="bg-gray-800 border border-gray-700 rounded px-3 py-1.5 text-sm w-20 focus:outline-none focus:border-amber-500">
+            </div>
+            <button id="td-diff-btn" class="btn-primary">Diff</button>
+          </div>
+          <div id="td-diff-summary" class="text-xs text-gray-500 hidden"></div>
+          <div class="scroll-panel hidden" id="td-diff-table-wrap">
+            <table class="maps-table w-full text-xs">
+              <thead><tr>
+                <th>Offset</th><th class="text-right">Len</th>
+                <th>Old (hex)</th><th>New (hex)</th>
+                <th class="text-right">Old i32</th><th class="text-right">New i32</th><th class="text-right">Δ</th>
+              </tr></thead>
+              <tbody id="td-diff-tbody" class="mono text-gray-300"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Correlation analysis -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="text-xs text-gray-500 uppercase tracking-wider">Correlation Analysis</div>
+            <button id="td-analyze-btn" class="btn-sm">Analyze</button>
+          </div>
+          <p class="text-xs text-gray-600">
+            After taking 2+ snapshots with different field values, click Analyze to find
+            which byte offsets track each field.
+          </p>
+          <div id="td-analyze-results" class="space-y-4"></div>
+        </section>
+      </div>
+
+      <!-- ═══ AI CHAT ═══ -->
+      <div id="tab-chat" class="tab-panel hidden flex flex-col h-full overflow-hidden">
+
+        <!-- Chat toolbar -->
+        <div class="bg-gray-900 border-b border-gray-800 px-4 py-2 flex items-center gap-3 shrink-0 flex-wrap">
+          <div class="flex items-center gap-2">
+            <label class="text-xs text-gray-500">Backend</label>
+            <select id="chat-backend" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm focus:outline-none focus:border-amber-500">
+              <option value="">use config default</option>
+              <option value="ollama">Ollama (local)</option>
+              <option value="anthropic">Anthropic</option>
+              <option value="openai">OpenAI</option>
+              <option value="gemini">Gemini</option>
+            </select>
+          </div>
+          <button id="chat-clear-btn" class="btn-sm ml-auto">Clear chat</button>
+          <button id="chat-sysprompt-toggle" class="btn-sm">System prompt ▾</button>
+        </div>
+
+        <!-- System prompt (collapsible) -->
+        <div id="chat-sysprompt-panel" class="bg-gray-900 border-b border-gray-800 px-4 py-3 shrink-0 hidden">
+          <textarea id="chat-sysprompt" rows="3"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-300 resize-none focus:outline-none focus:border-amber-500"
+            >You are an expert Dominions 6 strategist. Give concise, practical tactical and strategic advice. When uncertain, explain your reasoning and acknowledge uncertainty.</textarea>
+        </div>
+
+        <!-- Messages -->
+        <div id="chat-messages" class="chat-scroll flex-1 px-6 py-4 space-y-4 overflow-y-auto">
+          <p class="text-gray-600 text-sm text-center">Ask anything about your current game.</p>
+        </div>
+
+        <!-- Input -->
+        <div class="bg-gray-900 border-t border-gray-800 px-4 py-3 flex gap-2 shrink-0">
+          <textarea id="chat-input" rows="2" placeholder="Type your question… (Enter to send, Shift+Enter for newline)"
+            class="flex-1 bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 resize-none focus:outline-none focus:border-amber-500"></textarea>
+          <button id="chat-send-btn" class="btn-primary self-end px-4 py-2">Send</button>
+        </div>
+      </div>
+
+      <!-- ═══ SETTINGS ═══ -->
+      <div id="tab-settings" class="tab-panel hidden overflow-auto p-6 space-y-6">
+        <h2 class="text-amber-400 font-semibold text-sm uppercase tracking-wider">Settings</h2>
+
+        <!-- Active backend -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-3">
+          <div class="text-xs text-gray-500 uppercase tracking-wider">Active Backend</div>
+          <div id="backend-radios" class="flex gap-4 flex-wrap">
+            <!-- injected by JS -->
+          </div>
+        </section>
+
+        <!-- Per-backend configs -->
+        <section class="bg-gray-900 border border-gray-800 rounded-lg p-4 space-y-5">
+          <div class="text-xs text-gray-500 uppercase tracking-wider">Backend Configuration</div>
+
+          <!-- Ollama -->
+          <div class="space-y-2 border-b border-gray-800 pb-4">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium text-gray-200">Ollama</span>
+              <span id="ollama-badge" class="badge">local</span>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="cfg-label">Base URL
+                <input id="cfg-ollama-base_url" type="text" class="cfg-input">
+              </label>
+              <label class="cfg-label">Model
+                <input id="cfg-ollama-model" type="text" class="cfg-input">
+              </label>
+            </div>
+          </div>
+
+          <!-- Anthropic -->
+          <div class="space-y-2 border-b border-gray-800 pb-4">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium text-gray-200">Anthropic</span>
+              <span id="anthropic-badge" class="badge">—</span>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="cfg-label">API Key Env Var
+                <input id="cfg-anthropic-api_key_env" type="text" class="cfg-input">
+              </label>
+              <label class="cfg-label">Model
+                <input id="cfg-anthropic-model" type="text" class="cfg-input">
+              </label>
+            </div>
+          </div>
+
+          <!-- OpenAI -->
+          <div class="space-y-2 border-b border-gray-800 pb-4">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium text-gray-200">OpenAI / Compatible</span>
+              <span id="openai-badge" class="badge">—</span>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="cfg-label">API Key Env Var
+                <input id="cfg-openai-api_key_env" type="text" class="cfg-input">
+              </label>
+              <label class="cfg-label">Model
+                <input id="cfg-openai-model" type="text" class="cfg-input">
+              </label>
+              <label class="cfg-label col-span-2">Base URL <span class="text-gray-600 text-xs">(change for local servers)</span>
+                <input id="cfg-openai-base_url" type="text" class="cfg-input">
+              </label>
+            </div>
+          </div>
+
+          <!-- Gemini -->
+          <div class="space-y-2">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-medium text-gray-200">Google Gemini</span>
+              <span id="gemini-badge" class="badge">—</span>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <label class="cfg-label">API Key Env Var
+                <input id="cfg-gemini-api_key_env" type="text" class="cfg-input">
+              </label>
+              <label class="cfg-label">Model
+                <input id="cfg-gemini-model" type="text" class="cfg-input">
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- Save -->
+        <div class="flex items-center gap-4">
+          <button id="settings-save-btn" class="btn-primary px-6 py-2">Save Settings</button>
+          <span id="settings-save-status" class="text-sm text-gray-400"></span>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Tailwind component classes via @layer trick (inline style block) -->
+  <style>
+    .btn-primary {
+      @apply bg-amber-500 hover:bg-amber-400 text-gray-950 font-semibold text-sm rounded px-4 py-1.5 transition-colors;
+    }
+    .btn-sm {
+      @apply bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs rounded px-3 py-1.5 border border-gray-700 transition-colors;
+    }
+    .btn-sm:disabled {
+      @apply opacity-40 cursor-not-allowed;
+    }
+    .cfg-label {
+      @apply flex flex-col gap-1 text-xs text-gray-500;
+    }
+    .cfg-input {
+      @apply bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm text-gray-200 font-mono focus:outline-none focus:border-amber-500;
+    }
+    .badge {
+      @apply text-xs px-2 py-0.5 rounded-full bg-gray-800 text-gray-400 border border-gray-700;
+    }
+    .badge.key-set   { @apply border-green-700 text-green-400; }
+    .badge.key-unset { @apply border-red-900 text-red-400; }
+    /* Number/text inputs have browser-default white backgrounds — ensure dark text.
+       Textareas in this UI use bg-gray-800 with text-gray-200, so exclude them. */
+    #tab-journal input,
+    #prov-snap-template input {
+      color: #111827;
+    }
+  </style>
+
+  <!-- Province snapshot form template (cloned per province) -->
+  <template id="prov-snap-template">
+    <div class="prov-card border border-gray-700 rounded-lg p-3 space-y-3">
+      <div class="flex items-center justify-between">
+        <span class="prov-name text-sm font-semibold text-amber-300"></span>
+        <div class="flex gap-2">
+          <button class="prov-toggle-btn btn-sm">Update</button>
+          <button class="prov-delete-btn btn-sm text-red-400 border-red-900 hover:bg-red-950">Delete</button>
+        </div>
+      </div>
+      <!-- Latest snapshot summary -->
+      <div class="prov-summary text-xs text-gray-500 font-mono"></div>
+      <!-- Sites list -->
+      <div class="prov-sites text-xs text-gray-600"></div>
+      <!-- Snapshot edit form (hidden) -->
+      <div class="prov-form hidden border-t border-gray-700 pt-3 space-y-3">
+        <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <label class="cfg-label">Turn #<input name="turn_number" type="number" min="1" class="cfg-input"></label>
+          <label class="cfg-label">Terrain<input name="terrain" type="text" class="cfg-input" placeholder="e.g. forest"></label>
+          <label class="cfg-label">Population<input name="population" type="number" class="cfg-input"></label>
+          <label class="cfg-label">Income<input name="income" type="number" class="cfg-input"></label>
+          <label class="cfg-label">Resources<input name="resources" type="number" class="cfg-input"></label>
+          <label class="cfg-label">Rec. Points<input name="recruitment_points" type="number" class="cfg-input"></label>
+          <label class="cfg-label">Rec./Turn<input name="recruitment_per_turn" type="number" class="cfg-input"></label>
+          <label class="cfg-label">Supplies<input name="supplies" type="number" class="cfg-input"></label>
+          <label class="cfg-label">Supply Use<input name="supply_usage" type="number" class="cfg-input"></label>
+          <label class="cfg-label">Defense<input name="defense" type="number" class="cfg-input"></label>
+          <label class="cfg-label">Unrest<input name="unrest" type="number" class="cfg-input"></label>
+          <label class="cfg-label">Dom. Str.<input name="dominion_strength" type="number" class="cfg-input"></label>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500 mb-2">Scales <span class="text-gray-600">(+ = positive side)</span></div>
+          <div class="grid grid-cols-3 gap-2 sm:grid-cols-6">
+            <label class="cfg-label">Order<input name="scale_order" type="number" min="-3" max="3" class="cfg-input"></label>
+            <label class="cfg-label">Prod.<input name="scale_productivity" type="number" min="-3" max="3" class="cfg-input"></label>
+            <label class="cfg-label">Heat<input name="scale_heat" type="number" min="-3" max="3" class="cfg-input"></label>
+            <label class="cfg-label">Growth<input name="scale_growth" type="number" min="-3" max="3" class="cfg-input"></label>
+            <label class="cfg-label">Luck<input name="scale_luck" type="number" min="-3" max="3" class="cfg-input"></label>
+            <label class="cfg-label">Magic<input name="scale_magic" type="number" min="-3" max="3" class="cfg-input"></label>
+          </div>
+        </div>
+        <div>
+          <div class="text-xs text-gray-500 mb-1">Sites & Buildings <span class="text-gray-600">(one per line)</span></div>
+          <textarea name="sites" rows="3" placeholder="Fortification&#10;Laboratory&#10;The Grove of Gaia"
+            class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-xs font-mono text-gray-200 resize-y focus:outline-none focus:border-amber-500"></textarea>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="prov-snap-save-btn btn-primary">Save</button>
+          <button class="prov-form-cancel-btn btn-sm">Cancel</button>
+          <span class="prov-snap-status text-xs text-gray-400"></span>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <script type="module" src="/static/app.js"></script>
+</body>
+</html>

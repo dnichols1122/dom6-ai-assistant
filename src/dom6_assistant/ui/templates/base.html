@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Dominions 6 Assistant{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/htmx.min.js"></script>
+</head>
+<body>
+<header>
+  <span class="brand">⛬ Dominions&nbsp;6 <span class="dim">Assistant</span></span>
+  <a href="/agent{% if game %}?game={{ game.name | urlencode }}{% endif %}" style="margin-left:1rem;color:#d9a441;text-decoration:none;
+     font-weight:600">Assistant&nbsp;→</a>
+  <a href="/verify" style="margin-left:.8rem;color:#8fb8dd;text-decoration:none;
+     font-weight:600">Verify agent view&nbsp;→</a>
+  {% if game %}
+  <nav>
+    <form hx-get="/panel" hx-target="#state" hx-swap="innerHTML" class="inline">
+      <select name="game_id" onchange="this.form.requestSubmit()">
+        {% for g in games %}
+          <option value="{{ g.id }}" {% if g.id == game.id %}selected{% endif %}>{{ g.name }}</option>
+        {% endfor %}
+      </select>
+      <select name="turn" onchange="this.form.requestSubmit()">
+        {% for t in turns %}
+          <option value="{{ t }}" {% if turn and t == turn.turn %}selected{% endif %}>turn {{ t }}</option>
+        {% endfor %}
+      </select>
+    </form>
+  </nav>
+  {% endif %}
+</header>
+<main id="state">
+  {% block content %}{% endblock %}
+</main>
+<footer>
+  <span class="dim">Values are parsed from the <code>.trn</code>. Markers show how
+  much each field is trusted — check the <span class="c-guess">guess</span> ones
+  against the game.</span>
+</footer>
+</body>
+</html>

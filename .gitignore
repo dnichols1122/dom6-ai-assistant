@@ -1,0 +1,43 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+*.so
+
+# Game fixture files can be large; track them explicitly if needed
+tests/fixtures/*.2h
+tests/fixtures/*.trn
+tests/fixtures/*.fatherland
+knowledge/snapshots/*.trn.*
+knowledge/snapshots/*.2h.*
+knowledge/snapshots/ftherlnd.*
+
+# Reproducible third-party wiki corpus (keep its README, regenerate the rest)
+knowledge/illwiki/raw/
+knowledge/illwiki/manifest.json
+knowledge/illwiki/illwiki.sqlite3
+knowledge/illwiki/*.tmp
+
+# User-imported SillyTavern character-card avatars. The full source payload and
+# revision metadata are retained in the local game database.
+knowledge/characters/
+
+# Template for the public snapshot; scripts/prepare-public-repo.sh copies it in
+# as README.md. Untracked here so it never shadows this repo's own docs.
+README.public.md
+RUNNING.public.md
+
+# Staging directory for the public snapshot, if built in place.
+*-public/
+
+# --- created by running the assistant, never committed ---------------------
+knowledge/
+dom6-assistant.toml
+*.trn
+*.2h
+*.ftherlnd

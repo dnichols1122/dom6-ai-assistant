@@ -1,0 +1,81 @@
+/* Inspector UI: dense, readable, quiet. The data is the interface. */
+:root{
+  --bg:#14120f; --panel:#1c1a16; --line:#332f27; --ink:#e9e3d6; --dim:#928a7c;
+  --gold:#c9a961; --green:#84a96c; --amber:#d0a24c; --red:#c4694f; --blue:#7d9cb8;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--bg);color:var(--ink);min-height:100vh;
+  display:flex;flex-direction:column;
+  font:14px/1.5 "Iowan Old Style",Palatino,Georgia,serif;
+}
+header{
+  display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  padding:.7rem 1.2rem;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#221f19,#1a1713);
+}
+.brand{color:var(--gold);font-size:1.05rem;letter-spacing:.02em}
+main{flex:1;width:min(1300px,100% - 2rem);margin:1.2rem auto}
+footer{padding:.9rem 1.2rem;border-top:1px solid var(--line);font-size:.8rem}
+h1{font-size:1.35rem;margin:0 0 1rem;color:var(--gold);font-weight:600}
+h2{font-size:.95rem;margin:0 0 .7rem;color:var(--dim);font-weight:600;
+   text-transform:uppercase;letter-spacing:.06em}
+h2 .dim{text-transform:none;letter-spacing:0;font-weight:400;margin-left:.5rem}
+.dim{color:var(--dim)}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;color:var(--gold)}
+
+select{
+  background:#100e0b;color:var(--ink);border:1px solid var(--line);
+  border-radius:4px;padding:.3rem .5rem;font:inherit;font-size:.88rem;
+}
+select:focus{outline:none;border-color:var(--gold)}
+.inline{display:inline-flex;gap:.5rem;margin:0}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(370px,1fr));gap:1rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:1rem 1.1rem}
+.card.wide{grid-column:1/-1}
+.empty{text-align:center;padding:4rem 1rem;color:var(--dim)}
+
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th,td{text-align:left;padding:.4rem .55rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--dim);font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;font-weight:600}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#221f19}
+td.num{font-family:ui-monospace,Menlo,Consolas,monospace;text-align:right;white-space:nowrap}
+
+.pill{display:inline-block;padding:.06rem .5rem;border-radius:999px;font-size:.72rem;
+      border:1px solid var(--line);color:var(--dim);
+      font-family:ui-monospace,Menlo,Consolas,monospace;vertical-align:middle}
+.pill-nation{color:var(--gold);border-color:var(--gold)}
+.pill-cap{color:var(--blue);border-color:#3d4d5c;background:#161d24}
+
+/* Confidence markers: the whole point of the screen. */
+.c-confirmed{color:var(--green)}
+.c-derived{color:var(--amber)}
+.c-guess{color:var(--red)}
+
+.gems{display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));gap:.45rem}
+.gem{background:#100e0b;border:1px solid var(--line);border-radius:4px;
+     padding:.45rem;text-align:center}
+.gem b{display:block;font-size:1.1rem;color:var(--gold);
+       font-family:ui-monospace,Menlo,Consolas,monospace}
+.gem span{font-size:.68rem;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
+.gem.zero b{color:var(--dim)}
+
+.scales span{display:inline-block;margin-right:.5rem;font-size:.78rem;
+             font-family:ui-monospace,Menlo,Consolas,monospace}
+.scales .pos{color:var(--green)} .scales .neg{color:var(--red)}
+
+/* Province links. A border flag means ground troops cannot use the link even
+   though flyers can, so it is marked rather than left to be inferred. */
+.links       { line-height: 1.9 }
+.link        { display:inline-block; padding:1px 6px; margin:0 3px 0 0;
+               border:1px solid var(--line); border-radius:10px; font-size:.86em }
+.link.blocked{ border-style:dashed; border-color:var(--warn); color:var(--warn) }
+.gold        { float:right; font-weight:600; color:var(--gold, #d9a441) }
+.note        { margin:.7rem 0 0; font-size:.86em; color:var(--dim); line-height:1.5 }
+.note b      { color:var(--fg) }
+.me td { background: color-mix(in srgb, var(--accent) 10%, transparent) }
+.site   { font-size:.86em; margin-top:2px }
+.pill-q { border-style:dashed; opacity:.8 }
+.hof { margin:0; padding-left:1.4rem; line-height:1.7 }

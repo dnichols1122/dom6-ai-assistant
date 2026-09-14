@@ -1,0 +1,2171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dominions 6 — Assistant</title>
+<style>
+:root{
+  --bg:#0d0f13; --panel:#151922; --panel2:#1b202b; --line:#262d3a;
+  --text:#dfe4ee; --dim:#8b95a8; --gold:#d9a441; --ok:#5fb87a; --bad:#d4666a;
+  --tool:#6ba3d6; --mono:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;height:100vh;
+  display:flex;flex-direction:column;overflow:hidden}
+header{display:flex;align-items:center;gap:16px;padding:10px 18px;
+  background:var(--panel);border-bottom:1px solid var(--line);flex-shrink:0}
+header h1{font-size:13px;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--gold);margin:0;font-weight:600}
+.stat{font-size:12px;color:var(--dim)}
+.stat b{color:var(--text);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block;
+  background:var(--dim);margin-right:5px;vertical-align:1px}
+.dot.on{background:var(--ok)} .dot.off{background:var(--bad)}
+main{flex:1;display:flex;min-height:0}
+#left{flex:1;display:flex;flex-direction:column;min-width:0}
+#side{width:380px;border-left:1px solid var(--line);background:var(--panel);
+  display:flex;flex-direction:column;min-height:0}
+#log{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:80%;padding:10px 13px;border-radius:9px;white-space:pre-wrap;
+  word-wrap:break-word}
+.msg.user{align-self:flex-end;background:#26405e}
+.msg.bot{align-self:flex-start;background:var(--panel2);border:1px solid var(--line)}
+.msg.err{align-self:flex-start;background:#3a1f22;border:1px solid #5c2b30;color:#f0b9bc}
+.msg.cancelled{align-self:flex-start;background:#302820;border:1px solid #5c4930;color:#e8cd8a}
+.msg .body{white-space:pre-wrap}
+/* Rendered assistant output. `white-space:pre-wrap` is dropped on this branch:
+   the renderer produces real block elements, and keeping it would double every
+   newline that markdown has already turned into a paragraph. */
+.msg .body.md{white-space:normal}
+.msg .body.md > :first-child{margin-top:0}
+.msg .body.md > :last-child{margin-bottom:0}
+.md p{margin:0 0 9px}
+.md strong{color:#fff;font-weight:650}
+.md em{font-style:italic}
+.md del{opacity:.6}
+.md a{color:var(--gold)}
+.md h1,.md h2,.md h3,.md h4,.md h5,.md h6{
+  margin:14px 0 7px;font-size:13px;font-weight:650;color:var(--gold);
+  letter-spacing:.04em;line-height:1.35}
+.md h1{font-size:15px} .md h2{font-size:14px}
+.md ul,.md ol{margin:0 0 9px;padding-left:22px}
+.md li{margin:2px 0}
+.md li>ul,.md li>ol{margin:2px 0}
+.md blockquote{margin:0 0 9px;padding:2px 0 2px 10px;
+  border-left:3px solid var(--line);color:var(--dim)}
+.md hr{border:0;border-top:1px solid var(--line);margin:12px 0}
+.md code{font-family:var(--mono);font-size:12px;color:var(--gold);
+  background:#0b0e15;border:1px solid var(--line);border-radius:4px;padding:1px 4px}
+.md pre.md-code{margin:0 0 9px;padding:9px 11px;background:#0b0e15;
+  border:1px solid var(--line);border-radius:7px;overflow-x:auto}
+.md pre.md-code code{background:0;border:0;padding:0;color:#b9c4d6;
+  font-size:11.5px;line-height:1.5;white-space:pre}
+/* Tables scroll inside the bubble rather than widening the whole column. */
+.md .md-table-wrap{overflow-x:auto;margin:0 0 9px}
+.md table{border-collapse:collapse;font-size:12.5px}
+.md th,.md td{border:1px solid var(--line);padding:4px 9px;text-align:left}
+.md th{background:#0b0e15;color:var(--gold);font-weight:600;white-space:nowrap}
+.msg-editor{width:100%;min-height:70px;max-height:400px;resize:vertical;
+  background:#0b0e15;color:var(--text);border:1px solid var(--gold);
+  border-radius:6px;padding:8px 10px;font:13px/1.5 inherit;margin-top:2px}
+.msg-editor:focus{outline:none}
+.msg-editor-bar{display:flex;gap:6px;align-items:center;margin-top:6px}
+.msg-editor-bar .hint{font-size:10.5px;color:var(--dim);margin-left:auto}
+.msg-editor-bar button{padding:4px 10px;font-size:11px;border-radius:5px}
+.msg-actions{display:flex;gap:5px;margin-top:7px;opacity:.65}
+.msg:hover .msg-actions{opacity:1}
+.msg-actions button{background:transparent;color:var(--dim);border:1px solid #3a4353;
+  padding:2px 6px;border-radius:4px;font-size:10px;font-weight:500}
+.msg-actions button:hover{color:var(--text);border-color:var(--dim)}
+/* Reasoning is set apart from the answer: it is the model working, not the
+   model concluding, and reading it as an answer would be a mistake. */
+.msg.think{align-self:flex-start;width:100%;max-width:100%;background:#12161f;
+  border:1px solid var(--line);border-left:3px solid #6b5ba8;color:#a9b0c2;
+  font-size:13px;font-style:italic}
+.msg.think::before{content:"thinking";display:block;font-style:normal;
+  font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#7d74a8;
+  margin-bottom:5px}
+.hide-thinking .msg.think{display:none}
+.msg.progress{align-self:flex-start;width:100%;max-width:100%;background:#12161f;
+  border:1px solid var(--line);border-left:3px solid #6b5ba8;color:#c1c7d4;
+  font-size:13px}
+.msg.progress::before{content:"assistant progress";display:block;
+  font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:#7d74a8;
+  margin-bottom:5px}
+.tool{align-self:flex-start;width:100%;border:1px solid var(--line);
+  border-radius:8px;background:#111621;overflow:hidden}
+.tool>summary{cursor:pointer;padding:7px 11px;font-family:var(--mono);
+  font-size:12px;color:var(--tool);list-style:none;display:flex;
+  justify-content:space-between;gap:10px;align-items:center}
+.tool>summary::-webkit-details-marker{display:none}
+.tool[data-ok="false"]>summary{color:var(--bad)}
+.tool .badge{font-size:10px;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--dim);flex-shrink:0}
+.tool pre{margin:0;padding:10px 12px;border-top:1px solid var(--line);
+  background:#0b0e15;font-family:var(--mono);font-size:11.5px;line-height:1.5;
+  overflow-x:auto;color:#b9c4d6;max-height:340px;overflow-y:auto}
+.activity-note{background:#12161f;border:1px solid var(--line);
+  border-left:3px solid #6b5ba8;border-radius:7px;padding:8px 10px;
+  margin-bottom:9px;color:#a9b0c2;font-size:12px;white-space:pre-wrap}
+.activity-note::before{content:"assistant progress";display:block;
+  color:#7d74a8;font-size:9px;text-transform:uppercase;letter-spacing:.1em;
+  margin-bottom:4px}
+.activity-note.continuation::before{content:"automatic continuation"}
+form{display:flex;gap:9px;padding:12px 16px;border-top:1px solid var(--line);
+  background:var(--panel);flex-shrink:0;align-items:flex-end}
+textarea{flex:1;resize:none;background:var(--panel2);color:var(--text);
+  border:1px solid var(--line);border-radius:7px;padding:9px 11px;
+  font:inherit;min-height:40px;max-height:150px}
+textarea:focus{outline:none;border-color:var(--gold)}
+button{background:var(--gold);color:#151109;border:0;border-radius:7px;
+  padding:10px 17px;font-weight:600;cursor:pointer;font-size:13px}
+button:disabled{opacity:.45;cursor:default}
+button.stop{background:#6b252a;color:#f4d7d9}
+button.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);
+  font-weight:500;padding:7px 12px;font-size:12px}
+button.ghost:hover{color:var(--text);border-color:var(--dim)}
+select{background:var(--panel2);color:var(--text);border:1px solid var(--line);
+  border-radius:6px;padding:5px 7px;font-size:12px}
+select:disabled{opacity:.45;cursor:default}
+label.chk{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);
+  white-space:nowrap;padding-bottom:10px;cursor:pointer}
+.step-budget{display:flex;align-items:center;gap:5px;color:var(--dim);
+  white-space:nowrap;padding-bottom:8px;font-size:12px}
+.step-budget input{width:55px;background:var(--panel2);color:var(--text);
+  border:1px solid var(--line);border-radius:6px;padding:5px 6px;font:inherit}
+nav{display:flex;flex-wrap:wrap;border-bottom:1px solid var(--line);flex-shrink:0}
+nav button{flex:1;background:transparent;color:var(--dim);border:0;border-radius:0;
+  padding:10px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.09em;
+  font-weight:600;border-bottom:2px solid transparent}
+nav button.sel{color:var(--gold);border-bottom-color:var(--gold)}
+.pane{display:none;overflow-y:auto;padding:14px;flex:1;min-height:0}
+.pane.sel{display:block}
+.card{background:var(--panel2);border:1px solid var(--line);border-radius:7px;
+  padding:10px 12px;margin-bottom:9px}
+.card .meta{font-size:11px;color:var(--dim);margin-bottom:5px;
+  display:flex;gap:8px;flex-wrap:wrap}
+.tag{background:#2a3242;padding:1px 7px;border-radius:99px;font-size:10px;
+  text-transform:uppercase;letter-spacing:.06em}
+.tag.blocked{background:#4a2529;color:#f0b9bc}
+.tag.characterised{background:#4a3d1e;color:#e8cd8a}
+.card .why{font-size:12px;color:var(--dim);margin-top:6px;
+  border-top:1px solid var(--line);padding-top:6px}
+.empty{color:var(--dim);font-size:13px;text-align:center;padding:26px 10px}
+code{font-family:var(--mono);font-size:12px;color:var(--gold)}
+.sig{font-family:var(--mono);font-size:11.5px;color:var(--tool)}
+.warn{background:#3a2a15;border:1px solid #5c4526;color:#e8cd8a;
+  padding:8px 11px;border-radius:7px;font-size:12px;margin:12px 16px 0}
+.field{width:100%;background:var(--panel);color:var(--text);border:1px solid var(--line);
+  border-radius:6px;padding:6px;font:12.5px/1.4 inherit;margin-top:5px}
+/* Long-form card fields (Playbook guidance, notes, prompts) should grow with
+   their content. The chat composer intentionally keeps its separate cap. */
+textarea.field{resize:vertical;min-height:72px;max-height:none}
+.row{display:flex;gap:6px;align-items:center}.row>*{min-width:0}
+.mini{padding:5px 8px;font-size:11px}.card pre{white-space:pre-wrap;word-break:break-word;
+  font:11px/1.45 var(--mono);color:#b9c4d6;margin:7px 0 0}
+.portrait{width:72px;height:96px;object-fit:cover;border:1px solid var(--line);
+  border-radius:6px;background:#0b0e15;float:right;margin:0 0 8px 10px}
+.help{font-size:11px;color:var(--dim);margin:6px 0 10px}
+input[type=file]{width:100%;font-size:11px;color:var(--dim);margin:6px 0}
+#chat-select{max-width:230px}
+#chat-save{font-size:11px;color:var(--dim);min-width:66px}
+#chat-save.failed{color:var(--bad)}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Dominions 6 · Assistant</h1>
+  <select id="mode" title="Assistant workspace">
+    <option value="turn">Live turn</option>
+    <option value="pretender">Pretender design</option>
+    <option value="open">Open chat</option>
+  </select>
+  <select id="game-profile" title="Campaign and player faction"></select>
+  <select id="design-nation" title="Nation to design for" style="display:none"></select>
+  <select id="chat-select" title="Saved conversations"></select>
+  <button id="new-chat" class="ghost mini" type="button">New</button>
+  <button id="rename-chat" class="ghost mini" type="button">Rename</button>
+  <button id="delete-chat" class="ghost mini" type="button">Delete</button>
+  <span id="chat-save" title="Whether this chat is safely stored on the server"></span>
+  <span class="stat">Turn <b id="h-turn">—</b></span>
+  <span class="stat">Nation <b id="h-nation">—</b></span>
+  <span class="stat">Gold <b id="h-gold">—</b></span>
+  <span class="stat">Provinces <b id="h-prov">—</b></span>
+  <a href="/turns" style="color:var(--gold);font-size:12px;text-decoration:none">Game state</a>
+  <a href="/verify" style="color:var(--tool);font-size:12px;text-decoration:none">Verify agent view</a>
+  <button id="clear-chat" class="ghost" type="button">Clear chat</button>
+  <span class="stat" id="ingest-stat" title="Turns are ingested automatically while this server runs"></span>
+  <span class="stat" style="margin-left:auto"><span id="h-dot" class="dot"></span><span id="h-model">connecting…</span></span>
+</header>
+
+<div id="writewarn" class="warn" style="display:none"></div>
+
+<main>
+  <div id="left">
+    <div id="log"><div class="empty">Ask the assistant about the turn. It has
+      <span id="toolcount">…</span> tools and will look things up rather than
+      recall them.</div></div>
+    <form id="f">
+      <textarea id="q" placeholder="e.g. Assess our position. What should each commander do this turn?" rows="1"></textarea>
+      <button id="retry-last" class="ghost" type="button" disabled title="Rerun the latest prompt">Retry last</button>
+      <label id="write-control" class="chk"><input type="checkbox" id="w"> allow writes</label>
+      <label id="auto-control" class="chk" style="display:none"
+        title="Keep working until create_pretender succeeds or the step budget is exhausted."><input type="checkbox" id="auto"> autonomous design</label>
+      <label class="chk" title="Show or hide the model's reasoning in this chat. This does not change the model request or tool protocol."><input type="checkbox" id="th"> think aloud</label>
+      <label class="chk" title="Show the reply as it is written. Tool calls are still only run once complete."><input type="checkbox" id="stream"> stream</label>
+      <label class="step-budget" title="Maximum model completions for this run. Each tool result normally starts another step.">steps
+        <input id="max-steps" type="number" min="1" max="500" step="1" value="24">
+      </label>
+      <button id="send">Send</button>
+      <button id="stop" class="stop" type="button" style="display:none">Stop</button>
+    </form>
+  </div>
+
+  <div id="side">
+    <nav>
+      <button class="sel" data-p="orders">Orders</button>
+      <button data-p="notes">Notes</button>
+      <button data-p="playbook">Playbook</button>
+      <button data-p="context">Context</button>
+      <button data-p="decisions">History</button>
+      <button data-p="lessons">Lessons</button>
+      <button data-p="gaps">Gaps</button>
+      <button data-p="activity">Activity <span id="activity-count"></span></button>
+      <button data-p="character">Character</button>
+      <button data-p="tools">Tools</button>
+      <button data-p="model">Model</button>
+    </nav>
+    <div id="p-model" class="pane"></div>
+    <div id="p-orders" class="pane sel"></div>
+    <div id="p-notes"  class="pane"></div>
+    <div id="p-playbook" class="pane"></div>
+    <div id="p-context" class="pane"></div>
+    <div id="p-decisions" class="pane"></div>
+    <div id="p-lessons" class="pane"></div>
+    <div id="p-gaps"   class="pane"></div>
+    <div id="p-activity" class="pane"><div class="empty">Tool calls and their complete returned data will appear here.</div></div>
+    <div id="p-character" class="pane"></div>
+    <div id="p-tools"  class="pane"></div>
+  </div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const log = $('#log'), form = $('#f'), input = $('#q'), send = $('#send');
+const stopRun = $('#stop');
+const retryLast = $('#retry-last');
+const maxSteps = $('#max-steps');
+const mode = $('#mode'), designNation = $('#design-nation'), gameProfile = $('#game-profile');
+const chatSelect=$('#chat-select');
+const newChat=$('#new-chat'), renameChat=$('#rename-chat'), deleteChat=$('#delete-chat');
+const chatSave=$('#chat-save');
+const activity = $('#p-activity');
+let history = [], transcript = [], busy = false, currentRun = null;
+let activeConversationId=null, conversationList=[], chatSaveTimer=null;
+// A pending debounced write is held here so a workspace change, a rename, or a
+// deletion can flush it before it would land on the wrong conversation.
+let pendingConversationSave=null, conversationLibraryReady=false;
+// Switching workspace is asynchronous, and a second switch must not have its
+// list overwritten by the first one's late reply.
+let workspaceGeneration=0;
+let gameRecords = [];
+
+function isPretender(){ return mode.value === 'pretender'; }
+// Open chat has no game and no nation: reference data only, nothing to write.
+function isOpenChat(){ return mode.value === 'open'; }
+function workspaceChatKey(){
+  if(isOpenChat()) return 'dom6-open-chat-v1';
+  return isPretender()
+    ? 'dom6-pretender-chat-v1-' + designNation.value
+    : 'dom6-agent-chat-v1-' + gameProfile.value;
+}
+function chatKey(){
+  return activeConversationId
+    ? workspaceChatKey()+'-conversation-'+activeConversationId
+    : workspaceChatKey();
+}
+function controlKey(){ return workspaceChatKey()+'-controls'; }
+function selectedConversationKey(){
+  return workspaceChatKey()+'-selected-conversation';
+}
+function saveControls(){
+  const budget=Math.max(1,Math.min(500,parseInt(maxSteps.value,10)||24));
+  maxSteps.value=budget;
+  localStorage.setItem(controlKey(),JSON.stringify({
+    allow_writes:$('#w').checked,
+    autonomous:$('#auto').checked,
+    think_aloud:$('#th').checked,
+    stream:$('#stream').checked,
+    max_steps:budget
+  }));
+}
+function restoreControls(){
+  let saved=null;
+  try{ saved=JSON.parse(localStorage.getItem(controlKey())||'null'); }
+  catch(error){ localStorage.removeItem(controlKey()); }
+  $('#w').checked=Boolean(saved&&saved.allow_writes);
+  $('#auto').checked=Boolean(isPretender()&&saved&&saved.autonomous);
+  $('#th').checked=Boolean(saved&&saved.think_aloud);
+  updateThinkingVisibility();
+  $('#stream').checked=Boolean(saved&&saved.stream);
+  const budget=parseInt(saved&&saved.max_steps,10);
+  maxSteps.value=Number.isFinite(budget) ? Math.max(1,Math.min(500,budget)) : 24;
+  // Autonomous Pretender design has a write action as its completion
+  // condition. Preserve that existing invariant even if storage was edited.
+  if($('#auto').checked) $('#w').checked=true;
+}
+function updateThinkingVisibility(){
+  document.body.classList.toggle('hide-thinking', !$('#th').checked);
+}
+function characterScope(){
+  if(isOpenChat()) return 'open:general';
+  if(isPretender()) return 'pretender:' + designNation.value;
+  const option = gameProfile.selectedOptions[0];
+  return 'turn:' + (option ? option.dataset.gameId : gameProfile.value);
+}
+
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',
+  '"':'&quot;',"'":'&#39;'}[c]));
+const j = o => JSON.stringify(o, null, 2);
+
+// ── markdown ───────────────────────────────────────────────────────────────
+// The assistant writes **bold**, lists and tables, and the transcript showed
+// the punctuation instead. This renders a deliberate subset.
+//
+// Everything is HTML-escaped BEFORE any markup is applied, and the result is
+// built only from tags this function itself emits. That ordering is the whole
+// safety argument: model output relays wiki text the project treats as
+// untrusted, so it must never be able to contribute a tag or an attribute.
+function mdInline(s){
+  const code = [];
+  // Code spans are lifted out first so their contents are never marked up.
+  // Code spans are parked behind a sentinel that cannot occur in user
+  // text. Written as an escape rather than a literal NUL byte: a NUL in
+  // this file makes it binary to git and grep, and the publish sanitiser
+  // skips binary files -- which silently exempted this page from path
+  // scrubbing.
+  s = s.replace(/`([^`\n]+)`/g, (m, c) => {
+    code.push(c); return '\u0000C' + (code.length - 1) + '\u0000';
+  });
+  // Only http(s). A javascript: or data: URL never becomes a link.
+  s = s.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    (m, label, href) => '<a href="' + href + '" target="_blank" ' +
+                        'rel="noopener noreferrer">' + label + '</a>');
+  s = s.replace(/\*\*\*([^*\n]+)\*\*\*/g, '<strong><em>$1</em></strong>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[^\w*])\*([^*\n]+)\*(?![\w*])/g, '$1<em>$2</em>');
+  s = s.replace(/(^|[^\w_])__([^_\n]+)__(?![\w_])/g, '$1<strong>$2</strong>');
+  s = s.replace(/(^|[^\w_])_([^_\n]+)_(?![\w_])/g, '$1<em>$2</em>');
+  s = s.replace(/~~([^~\n]+)~~/g, '<del>$1</del>');
+  return s.replace(/\u0000C(\d+)\u0000/g, (m, i) => '<code>' + code[i] + '</code>');
+}
+
+function mdCells(row){
+  return row.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|')
+            .map(cell => cell.trim());
+}
+
+function renderMarkdown(raw){
+  const lines = esc(String(raw == null ? '' : raw)).split('\n');
+  const out = [];
+  let i = 0;
+  const isBlank = line => !line.trim();
+
+  while(i < lines.length){
+    const line = lines[i];
+
+    if(isBlank(line)){ i++; continue; }
+
+    const fence = line.match(/^\s*```(\S*)\s*$/);
+    if(fence){
+      const body = [];
+      i++;
+      while(i < lines.length && !/^\s*```\s*$/.test(lines[i])){ body.push(lines[i]); i++; }
+      i++;                                   // the closing fence, if there was one
+      out.push('<pre class="md-code"><code>' + body.join('\n') + '</code></pre>');
+      continue;
+    }
+
+    if(/^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(line)){ out.push('<hr>'); i++; continue; }
+
+    const heading = line.match(/^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/);
+    if(heading){
+      const level = heading[1].length;
+      out.push('<h' + level + '>' + mdInline(heading[2]) + '</h' + level + '>');
+      i++; continue;
+    }
+
+    // A pipe table needs its delimiter row; without one these are just pipes.
+    if(line.includes('|') && i + 1 < lines.length &&
+       /^[\s|:-]+$/.test(lines[i + 1]) && lines[i + 1].includes('-')){
+      const head = mdCells(line);
+      i += 2;
+      const rows = [];
+      while(i < lines.length && lines[i].includes('|') && !isBlank(lines[i])){
+        rows.push(mdCells(lines[i])); i++;
+      }
+      out.push('<div class="md-table-wrap"><table><thead><tr>' +
+        head.map(c => '<th>' + mdInline(c) + '</th>').join('') +
+        '</tr></thead><tbody>' +
+        rows.map(r => '<tr>' + head.map(
+          (_, n) => '<td>' + mdInline(r[n] || '') + '</td>').join('') + '</tr>').join('') +
+        '</tbody></table></div>');
+      continue;
+    }
+
+    if(/^\s*&gt;\s?/.test(line)){
+      const body = [];
+      while(i < lines.length && /^\s*&gt;\s?/.test(lines[i])){
+        body.push(lines[i].replace(/^\s*&gt;\s?/, '')); i++;
+      }
+      out.push('<blockquote>' + renderMarkdown(
+        body.join('\n').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")) + '</blockquote>');
+      continue;
+    }
+
+    const bullet = line.match(/^(\s*)([-*+]|\d+[.)])\s+/);
+    if(bullet){
+      const ordered = /\d/.test(bullet[2]);
+      const items = [];
+      while(i < lines.length){
+        const m = lines[i].match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/);
+        if(!m || (/\d/.test(m[2]) !== ordered)) break;
+        const parts = [m[3]];
+        i++;
+        // Continuation lines belong to the item they are indented under.
+        while(i < lines.length && !isBlank(lines[i]) &&
+              !/^(\s*)([-*+]|\d+[.)])\s+/.test(lines[i]) && /^\s+/.test(lines[i])){
+          parts.push(lines[i].trim()); i++;
+        }
+        items.push('<li>' + mdInline(parts.join(' ')) + '</li>');
+      }
+      out.push((ordered ? '<ol>' : '<ul>') + items.join('') + (ordered ? '</ol>' : '</ul>'));
+      continue;
+    }
+
+    const para = [];
+    while(i < lines.length && !isBlank(lines[i]) &&
+          !/^\s*(```|&gt;|#{1,6}\s|[-*+]\s|\d+[.)]\s)/.test(lines[i]) &&
+          !/^\s{0,3}(-{3,}|\*{3,}|_{3,})\s*$/.test(lines[i])){
+      para.push(lines[i]); i++;
+    }
+    if(para.length) out.push('<p>' + mdInline(para.join('\n')) + '</p>');
+    else i++;                                // never spin on a line nothing claimed
+  }
+  return out.join('');
+}
+
+//: Which bubbles get marked up. The user's own text is left exactly as typed —
+//: an asterisk in a pasted unit name is an asterisk — and harness notices are
+//: diagnostics, where the literal characters are the point.
+const MARKDOWN_KINDS = new Set(['bot', 'think']);
+
+function clearEmpty(){ const e = log.querySelector('.empty'); if(e) e.remove(); }
+function clearActivityEmpty(){ const e = activity.querySelector('.empty'); if(e) e.remove(); }
+function updateActivityCount(){
+  const count = transcript.filter(entry => entry.kind === 'tool').length;
+  $('#activity-count').textContent = count ? '(' + count + ')' : '';
+}
+function showActivity(){
+  if(activity.classList.contains('sel')) return;
+  const tab = document.querySelector('nav button[data-p="activity"]');
+  if(tab) tab.click();
+}
+function newExchangeId(){
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2,8);
+}
+function latestUserExchange(){
+  for(let i=history.length-1; i>=0; i--){
+    if(history[i].role === 'user') return history[i]._exchange || null;
+  }
+  return null;
+}
+function updateChatControls(){
+  retryLast.disabled = busy || !latestUserExchange();
+  // A run streams into whichever conversation is open, so the library is frozen
+  // for its duration rather than allowed to switch out from under it.
+  const frozen = busy || !conversationLibraryReady;
+  chatSelect.disabled = frozen;
+  newChat.disabled = frozen;
+  renameChat.disabled = frozen || !activeConversation();
+  deleteChat.disabled = frozen || !activeConversation();
+}
+function setSaveState(state){
+  chatSave.textContent = state;
+  chatSave.classList.toggle('failed', state === 'not saved');
+}
+
+// The server copy is the archive: it is the reason this library exists, so it
+// gets the whole conversation. Only the browser cache below is trimmed, since
+// a per-origin quota is the constraint SQLite was brought in to escape.
+//
+// The arrays are snapshotted rather than passed by reference: a debounced write
+// must not be emptied by the reset a workspace or chat change performs while it
+// is still queued.
+function conversationState(){
+  return {history:history.slice(), transcript:transcript.slice()};
+}
+function browserState(){
+  return {history:history.slice(-40),transcript:transcript.slice(-250)};
+}
+function inferredConversationTitle(state){
+  const first=(state.history||[]).find(message=>message.role==='user');
+  if(!first||!String(first.content||'').trim()) return 'New chat';
+  const text=String(first.content).replace(/\s+/g,' ').trim();
+  return text.length>70 ? text.slice(0,67)+'…' : text;
+}
+function activeConversation(){
+  return conversationList.find(row=>row.id===activeConversationId)||null;
+}
+function renderConversationSelect(){
+  chatSelect.innerHTML=conversationList.map(row=>
+    '<option value="'+esc(row.id)+'"'+(row.id===activeConversationId?' selected':'')+'>'+esc(row.title)+'</option>'
+  ).join('');
+}
+// FastAPI reports validation failures as a list of objects. Interpolating one
+// into a string gives "[object Object]", which says nothing about what was
+// wrong -- a 422 on a mis-declared route read exactly like that.
+function problemText(payload, fallback){
+  const detail = payload && payload.detail;
+  if(typeof detail === 'string') return detail;
+  if(Array.isArray(detail)){
+    return detail.map(item => {
+      const where = Array.isArray(item.loc) ? item.loc.join('.') : '';
+      return (where ? where + ': ' : '') + (item.msg || JSON.stringify(item));
+    }).join('; ');
+  }
+  if(detail) return JSON.stringify(detail);
+  return fallback;
+}
+
+async function conversationRequest(url,options){
+  const response=await apiFetch(url,options);
+  let payload=null;
+  // A 500 can arrive as HTML, and `Unexpected token <` would hide the status.
+  try{ payload=await response.json(); }catch(error){ payload=null; }
+  if(!response.ok){
+    throw new Error(problemText(
+      payload, 'Conversation request failed: '+response.status));
+  }
+  return payload||{};
+}
+function conversationUrl(id,query){
+  return '/api/agent/conversations/'+encodeURIComponent(id)+(query||'');
+}
+async function persistConversation(id,state,title=null){
+  if(!id) return null;
+  const body={scope_key:characterScope(),state};
+  if(title!=null) body.title=title;
+  return conversationRequest(conversationUrl(id),{
+    method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+}
+function flushConversationSave(){
+  if(chatSaveTimer){ clearTimeout(chatSaveTimer); chatSaveTimer=null; }
+  const pending=pendingConversationSave;
+  pendingConversationSave=null;
+  if(!pending) return Promise.resolve();
+  return conversationRequest(conversationUrl(pending.id),{
+    method:'PUT',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(pending.body)
+  }).then(()=>{
+      // A newer edit may have queued while this write was in flight; do not
+      // report the chat as saved when it is already ahead of the server.
+      if(!pendingConversationSave) setSaveState('saved');
+    })
+    .catch(error=>{
+      // Say so rather than pretend. The browser cache still holds a trimmed
+      // copy, but the archive did not take this write.
+      console.warn('Could not persist named conversation',error);
+      setSaveState('not saved');
+    });
+}
+function discardPendingSave(){
+  if(chatSaveTimer){ clearTimeout(chatSaveTimer); chatSaveTimer=null; }
+  pendingConversationSave=null;
+}
+function scheduleConversationSave(state){
+  if(!activeConversationId||!conversationLibraryReady) return;
+  const id=activeConversationId,scope=characterScope();
+  const meta=activeConversation();
+  let title=meta?meta.title:'New chat';
+  if(title==='New chat'){
+    title=inferredConversationTitle(state);
+    if(meta&&title!==meta.title){ meta.title=title; renderConversationSelect(); }
+  }
+  pendingConversationSave={id,body:{scope_key:scope,state,title}};
+  setSaveState('saving…');
+  if(chatSaveTimer) clearTimeout(chatSaveTimer);
+  chatSaveTimer=setTimeout(()=>{ chatSaveTimer=null; void flushConversationSave(); },600);
+}
+
+function saveChat(){
+  const state=browserState();
+  try{
+    localStorage.setItem(chatKey(), JSON.stringify(state));
+  }catch(error){
+    // Exact tool returns can exceed a browser's storage quota. Keep the
+    // conversation and call names in that case; the live page remains whole.
+    const compact = state.transcript.map(entry => entry.kind === 'tool'
+      ? {...entry, result:entry.result == null ? null : {
+          ok:entry.result.ok, kind:entry.result.kind,
+          error:entry.result.error,
+          note:'full tool result omitted from browser persistence'}}
+      : entry);
+    const compactHistory = state.history.map(message => {
+      const content = String(message.content || '');
+      if(content.length <= 60000) return message;
+      return {...message, content:content.slice(0, 29000) +
+        '\n\n[...middle omitted from browser persistence...]\n\n' +
+        content.slice(-29000)};
+    });
+    try{ localStorage.setItem(chatKey(),
+      JSON.stringify({history:compactHistory, transcript:compact})); }
+    catch(ignored){ console.warn('Could not persist assistant chat', ignored); }
+  }
+  scheduleConversationSave(conversationState());
+}
+
+function bubble(cls, text, remember=true, exchange=null){
+  clearEmpty();
+  const d = document.createElement('div');
+  d.className = 'msg ' + cls;
+  d.dataset.exchange = exchange || '';
+  const body = document.createElement('div');
+  if(MARKDOWN_KINDS.has(cls)){
+    body.className = 'body md';
+    body.innerHTML = renderMarkdown(text);
+  }else{
+    body.className = 'body';
+    body.textContent = text;
+  }
+  d.appendChild(body);
+  if(exchange && ['user','bot','err','cancelled'].includes(cls)){
+    const actions = document.createElement('div'); actions.className = 'msg-actions';
+    if(cls === 'user'){
+      actions.innerHTML = '<button type="button" data-action="edit">Edit & retry</button>' +
+        '<button type="button" data-action="retry">Retry</button>' +
+        '<button type="button" data-action="delete-user">Delete</button>';
+    }else if(cls === 'bot'){
+      actions.innerHTML = '<button type="button" data-action="edit-response">Edit</button>' +
+        '<button type="button" data-action="retry">Retry prompt</button>' +
+        '<button type="button" data-action="delete-response">Delete</button>';
+    }else{
+      actions.innerHTML = '<button type="button" data-action="retry">Retry prompt</button>' +
+        '<button type="button" data-action="delete-response">Delete</button>';
+    }
+    actions.querySelectorAll('button').forEach(button => button.onclick = () => {
+      if(busy) return;
+      const action = button.dataset.action;
+      if(action === 'edit') editAndRetry(exchange, d);
+      else if(action === 'edit-response') editResponse(exchange, d);
+      else if(action === 'retry') retryExchange(exchange);
+      else if(action === 'delete-user') deleteExchange(exchange);
+      else if(action === 'delete-response') deleteResponse(exchange);
+    });
+    d.appendChild(actions);
+  }
+  log.appendChild(d); log.scrollTop = log.scrollHeight;
+  if(remember){ transcript.push({kind:cls, text, _exchange:exchange}); saveChat(); }
+  return d;
+}
+
+function activityNote(text, remember=true, exchange=null){
+  clearActivityEmpty();
+  const d = document.createElement('div');
+  d.className = 'activity-note'; d.textContent = text;
+  activity.appendChild(d); activity.scrollTop = activity.scrollHeight;
+  if(remember){ transcript.push({kind:'progress', text, _exchange:exchange}); saveChat(); }
+  return d;
+}
+
+function toolCard(name, args, remember=true, exchange=null){
+  clearActivityEmpty();
+  const d = document.createElement('details');
+  d.className = 'tool'; d.open = false;
+  d.innerHTML = '<summary><span>Used ' + esc(name) + '</span>' +
+                '<span class="badge">running</span></summary>';
+  const suppliedArgs = Object.keys(args||{}).length;
+  if(suppliedArgs){
+    const pre = document.createElement('pre');
+    pre.textContent = 'Arguments\n' + j(args);
+    d.appendChild(pre);
+  }
+  activity.appendChild(d); activity.scrollTop = activity.scrollHeight;
+  if(remember){
+    d.dataset.entry = transcript.push({
+      kind:'tool', name, args, result:null, _exchange:exchange,
+    }) - 1;
+    saveChat(); updateActivityCount();
+  }
+  return d;
+}
+
+function fillTool(card, result, remember=true){
+  const ok = result && result.ok;
+  card.dataset.ok = ok ? 'true' : 'false';
+  card.querySelector('.badge').textContent = ok ? 'ok' : (result.kind || 'error');
+  const pre = document.createElement('pre');
+  pre.textContent = 'Result\n' + (ok ? j(result.result) : (result.error || j(result)));
+  // Keep the ordinary view to one compact line per tool. Full arguments and
+  // returns remain available by deliberately expanding the Activity card.
+  card.open = false;
+  card.appendChild(pre);
+  activity.scrollTop = activity.scrollHeight;
+  if(remember && card.dataset.entry !== undefined){
+    const entry = transcript[Number(card.dataset.entry)];
+    if(entry){ entry.result = result; saveChat(); }
+  }
+}
+
+function normalizeExchangeIds(){
+  let current = null;
+  const userIds = [];
+  history.forEach(message => {
+    if(message.role === 'user'){
+      current = message._exchange || newExchangeId();
+      message._exchange = current; userIds.push(current);
+    }else if(message.role === 'assistant'){
+      message._exchange = message._exchange || current;
+    }
+  });
+  let userIndex = 0;
+  current = null;
+  transcript.forEach(entry => {
+    if(entry.kind === 'user'){
+      const fallback = userIds[userIndex++];
+      current = entry._exchange || fallback || newExchangeId();
+      entry._exchange = current;
+    }else if(!entry._exchange && current){
+      entry._exchange = current;
+    }
+  });
+}
+
+function emptyLogMessage(){
+  if(isOpenChat()) return 'Ask about the game. No save file is in scope here \u2014 '
+    + 'reference data, nations and the wiki only.';
+  return isPretender()
+    ? 'Ask the assistant to design, compare, and save a pretender for the selected nation.'
+    : 'Ask the assistant about the current turn.';
+}
+
+function renderTranscript(){
+  log.innerHTML = '';
+  activity.innerHTML = '';
+  for(let i=0; i<transcript.length; i++){
+    const entry = transcript[i];
+    if(entry.kind === 'tool'){
+      const card = toolCard(entry.name, entry.args, false, entry._exchange);
+      card.dataset.entry = i;
+      if(entry.result != null) fillTool(card, entry.result, false);
+      else{
+        card.dataset.ok = 'false';
+        card.querySelector('.badge').textContent = 'interrupted';
+      }
+    }else if(['user','bot','think','progress','err','cancelled'].includes(entry.kind)){
+      bubble(entry.kind, entry.text, false, entry._exchange);
+    }
+  }
+  if(!transcript.length){
+    log.innerHTML = '<div class="empty">' + esc(emptyLogMessage()) + '</div>';
+    activity.innerHTML = '<div class="empty">Tool calls and their complete returned data will appear here.</div>';
+  }else if(!activity.children.length){
+    activity.innerHTML = '<div class="empty">No tool calls in this conversation.</div>';
+  }
+  updateActivityCount();
+  updateChatControls();
+}
+
+const retainedToolPrefix =
+  '[Tool-assisted work retained by the local harness from your previous reply.';
+function cleanHistoryMessage(message){
+  // Older builds flattened tool calls and full results into an assistant chat
+  // message. Models sometimes echoed that block verbatim as their next answer.
+  // Activity retains the evidence; model history needs only the final answer.
+  if(message && message.role === 'assistant' &&
+     String(message.content||'').startsWith(retainedToolPrefix)){
+    const marker='\n\nFinal answer:\n';
+    const at=String(message.content).lastIndexOf(marker);
+    if(at < 0) return null;
+    return {...message, content:String(message.content).slice(at+marker.length)};
+  }
+  return message;
+}
+
+function restoreChat(savedState=null){
+  let saved=savedState;
+  try{ saved=saved||JSON.parse(localStorage.getItem(chatKey())||'null'); }
+  catch(error){ localStorage.removeItem(chatKey()); saved=null; }
+  if(saved && Array.isArray(saved.history) && Array.isArray(saved.transcript)){
+    history = saved.history.map(cleanHistoryMessage).filter(Boolean);
+    transcript = saved.transcript;
+  }
+  // Render unconditionally: an empty conversation must clear the pane rather
+  // than leave the previous one's messages standing.
+  normalizeExchangeIds();
+  renderTranscript();
+}
+
+async function loadConversation(id,generation=workspaceGeneration){
+  discardPendingSave();
+  activeConversationId=id;
+  localStorage.setItem(selectedConversationKey(),id);
+  history=[]; transcript=[];
+  let saved=null;
+  try{
+    const payload=await conversationRequest(
+      conversationUrl(id,'?scope_key='+encodeURIComponent(characterScope())));
+    saved=payload.conversation.state;
+  }catch(error){
+    // The trimmed browser copy of this same conversation is the fallback, and
+    // autosave stops: writing a trimmed copy back would truncate the archive.
+    console.warn('Using browser conversation cache',error);
+    conversationLibraryReady=false;
+  }
+  if(generation!==workspaceGeneration) return;
+  restoreChat(saved);
+  if(saved) try{ localStorage.setItem(chatKey(),JSON.stringify(browserState())); }
+            catch(ignored){ /* quota; the server copy is the archive */ }
+  renderConversationSelect();
+  setSaveState(saved?'saved':'not saved');
+  chatSave.title = saved
+    ? 'This chat is stored on the server'
+    : 'The server copy could not be read; this is the browser cache and is not being saved';
+  updateChatControls();
+}
+
+async function initialiseConversationLibrary(generation){
+  discardPendingSave();
+  activeConversationId=null; conversationList=[];
+  const scope=characterScope();
+  const listed=await conversationRequest(
+    '/api/agent/conversations?scope_key='+encodeURIComponent(scope));
+  if(generation!==workspaceGeneration) return;
+  conversationList=listed.conversations||[];
+
+  // One-time, non-destructive migration of the former single-chat key. The
+  // legacy entry is left in place: it is the only copy of that chat until the
+  // server has acknowledged the import.
+  const migrationKey=workspaceChatKey()+'-chat-library-migrated';
+  let legacy=null;
+  try{ legacy=JSON.parse(localStorage.getItem(workspaceChatKey())||'null'); }
+  catch(error){ legacy=null; }
+  if(!localStorage.getItem(migrationKey)&&legacy&&
+      Array.isArray(legacy.history)&&Array.isArray(legacy.transcript)&&
+      (legacy.history.length||legacy.transcript.length)){
+    const made=await conversationRequest('/api/agent/conversations',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        scope_key:scope,title:inferredConversationTitle(legacy),state:legacy})});
+    if(generation!==workspaceGeneration) return;
+    conversationList.unshift(made.conversation);
+    localStorage.setItem(migrationKey,'1');
+  }
+  if(!conversationList.length){
+    const made=await conversationRequest('/api/agent/conversations',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        scope_key:scope,title:'New chat',state:{history:[],transcript:[]}})});
+    if(generation!==workspaceGeneration) return;
+    conversationList=[made.conversation];
+  }
+  const remembered=localStorage.getItem(selectedConversationKey());
+  const selected=conversationList.find(row=>row.id===remembered)||conversationList[0];
+  conversationLibraryReady=true;
+  await loadConversation(selected.id,generation);
+}
+
+async function openConversationLibrary(generation){
+  conversationLibraryReady=false;
+  activeConversationId=null; conversationList=[];
+  chatSelect.innerHTML='<option value="">loading…</option>';
+  setSaveState('');
+  updateChatControls();
+  try{
+    await initialiseConversationLibrary(generation);
+  }catch(error){
+    if(generation!==workspaceGeneration) return;
+    // Without the library this is still a usable page: fall back to the single
+    // browser-held chat this workspace has always had.
+    console.warn('Conversation library unavailable; using the browser copy',error);
+    conversationLibraryReady=false;
+    activeConversationId=null; conversationList=[];
+    chatSelect.innerHTML='<option value="">browser chat only</option>';
+    setSaveState('not saved');
+    restoreChat();
+  }
+  if(generation===workspaceGeneration) updateChatControls();
+}
+
+// ── conversation library controls ──────────────────────────────────────────
+async function newConversation(){
+  if(busy||!conversationLibraryReady) return;
+  await flushConversationSave();
+  try{
+    const made=await conversationRequest('/api/agent/conversations',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        scope_key:characterScope(),title:'New chat',
+        state:{history:[],transcript:[]}})});
+    conversationList.unshift(made.conversation);
+    await loadConversation(made.conversation.id);
+    input.focus();
+  }catch(error){
+    alert('Could not start a new chat: '+error.message);
+  }
+}
+
+async function renameConversation(){
+  if(busy||!conversationLibraryReady) return;
+  const meta=activeConversation(); if(!meta) return;
+  const changed=window.prompt('Name this chat:',meta.title);
+  if(changed==null||!changed.trim()) return;
+  await flushConversationSave();
+  try{
+    const saved=await persistConversation(
+      meta.id,conversationState(),changed.trim());
+    meta.title=saved.conversation.title;
+    renderConversationSelect();
+    setSaveState('saved');
+  }catch(error){
+    alert('Could not rename this chat: '+error.message);
+  }
+}
+
+async function deleteConversation(){
+  if(busy||!conversationLibraryReady) return;
+  const meta=activeConversation(); if(!meta) return;
+  if(!confirm('Remove the chat "'+meta.title+'" from this list?\n\n' +
+              'It is archived in the database rather than destroyed.')) return;
+  discardPendingSave();
+  try{
+    await conversationRequest(conversationUrl(meta.id,
+      '?scope_key='+encodeURIComponent(characterScope())),{method:'DELETE'});
+  }catch(error){
+    alert('Could not delete this chat: '+error.message);
+    return;
+  }
+  localStorage.removeItem(chatKey());
+  conversationList=conversationList.filter(row=>row.id!==meta.id);
+  if(conversationList.length) await loadConversation(conversationList[0].id);
+  else await newConversation();
+}
+
+chatSelect.onchange=async()=>{
+  const id=chatSelect.value;
+  if(!id||id===activeConversationId||!conversationLibraryReady) return;
+  if(busy){ renderConversationSelect(); return; }
+  await flushConversationSave();
+  await loadConversation(id);
+};
+newChat.onclick=()=>{ void newConversation(); };
+renameChat.onclick=()=>{ void renameConversation(); };
+deleteChat.onclick=()=>{ void deleteConversation(); };
+
+// ── side panels ────────────────────────────────────────────────────────────
+function agentUrl(u){
+  if(isPretender() || !gameProfile.value || !u.startsWith('/api/agent')) return u;
+  const url=new URL(u,location.origin); url.searchParams.set('game',gameProfile.value);
+  return url.pathname+url.search;
+}
+async function apiFetch(u,options){ return fetch(agentUrl(u),options); }
+async function get(u){ const r = await apiFetch(u); return r.json(); }
+
+// Ingestion runs on the server for as long as it is up. Showing it matters:
+// silently stale data reads exactly like the assistant being wrong.
+async function loadIngest(){
+  const box = $('#ingest-stat');
+  try{
+    // Plain fetch: this endpoint is not under /api/agent, so it must not go
+    // through agentUrl(), which appends the selected game.
+    const response = await fetch('/api/ingest/status');
+    const s = response.ok ? await response.json() : null;
+    if(!s || s.enabled === false){ box.textContent = ''; return; }
+    if(!s.running){
+      box.innerHTML = 'ingest <b style="color:var(--bad)">stopped</b>';
+      box.title = 'The turn watcher is not running; turns will not be ingested.';
+      return;
+    }
+    const failed = s.failed ? ' · ' + s.failed + ' failed' : '';
+    box.innerHTML = 'ingest <b>' + (s.watching||[]).length + ' game' +
+      ((s.watching||[]).length === 1 ? '' : 's') + '</b>' + failed;
+    const last = (s.recent||[])[0];
+    box.title = 'Watching ' + s.root + '\n' + s.ingested + ' turn(s) ingested this session' +
+      (last ? '\nlast: ' + (last.error ? last.path + ' — ' + last.error
+                                        : last.profile + ' turn ' + last.turn) : '');
+  }catch(error){ box.textContent = ''; }
+}
+
+async function loadState(){
+  try{
+    if(isOpenChat()){
+      const s = await get('/api/agent/open/state');
+      $('#h-turn').textContent = 'no game';
+      $('#h-nation').textContent = '—';
+      $('#h-gold').textContent = '—'; $('#h-prov').textContent = '—';
+      $('#toolcount').textContent = (s.tools||[]).length;
+      $('#p-tools').innerHTML = (s.tools||[]).map(t =>
+        '<div class="card"><div class="sig">' + esc(t.signature) + '</div>' +
+        '<div class="why" style="border:0;padding-top:4px">' + esc(t.description) +
+        '</div></div>').join('');
+      $('#h-model').textContent = 'open chat';
+      $('#h-dot').className = 'dot on';
+      return;
+    }
+    if(isPretender()){
+      const s = await get('/api/agent/pretender/state?nation_id=' + designNation.value);
+      $('#h-turn').textContent = 'design';
+      $('#h-nation').textContent = s.nation ? s.nation.id : designNation.value;
+      $('#h-gold').textContent = '—'; $('#h-prov').textContent = '—';
+      $('#toolcount').textContent = (s.tools||[]).length;
+      $('#p-tools').innerHTML = (s.tools||[]).map(t =>
+        '<div class="card"><div class="sig">' + esc(t.signature) +
+        (t.writes ? ' <span class="tag">writes</span>' : '') + '</div>' +
+        '<div class="why" style="border:0;padding-top:4px">' + esc(t.description) +
+        '</div></div>').join('');
+      $('#h-model').textContent = 'pretender design';
+      $('#h-dot').className = 'dot on';
+      return;
+    }
+    const s = await get('/api/agent/state');
+    if(s.summary){
+      $('#h-turn').textContent = s.summary.turn;
+      $('#h-nation').textContent = s.summary.nation_id;
+      $('#h-gold').textContent = s.summary.gold ?? '—';
+      $('#h-prov').textContent = s.summary.provinces_owned;
+    }
+    const m = s.model || {};
+    $('#h-dot').className = 'dot ' + (m.reachable ? 'on' : 'off');
+    $('#h-model').textContent = m.reachable
+      ? (m.model || '?') + (m.native_tools === false ? ' (text protocol)' : '')
+      : 'model unreachable';
+    $('#toolcount').textContent = (s.tools||[]).length;
+    $('#p-tools').innerHTML = (s.tools||[]).map(t =>
+      '<div class="card"><div class="sig">' + esc(t.signature) +
+      (t.writes ? ' <span class="tag">writes</span>' : '') + '</div>' +
+      '<div class="why" style="border:0;padding-top:4px">' + esc(t.description) +
+      '</div></div>').join('');
+  }catch(e){ $('#h-model').textContent = 'state unavailable'; }
+}
+
+async function loadOrders(){
+  if(isOpenChat()){
+    $('#p-orders').innerHTML = '<div class="empty">Open chat has no game and no orders. It reads static reference data only \u2014 no save file, no turn, no player position.</div>';
+    return;
+  }
+  if(isPretender()){
+    $('#p-orders').innerHTML = '<div class="empty">Pretender design has no turn orders. Use the Tools tab to inspect its exact design and wiki-reference tools.</div>';
+    return;
+  }
+  const d = await get('/api/agent/orders');
+  const rows = d.orders || [];
+  let html = rows.length ? rows.map(o => {
+    let parameter = '';
+    if(o.destination) parameter = '→ province ' + o.destination;
+    else if(o.item_id != null) parameter = '→ ' + (o.item_name || ('item ' + o.item_id));
+    else if(o.magic_path) parameter = '→ ' + o.magic_path;
+    else if(o.building) parameter = '→ ' + o.building;
+    return '<div class="card"><div class="meta"><b>' + esc(o.commander_name || o.commander_id) +
+      '</b><span class="tag">' + esc(o.order) + '</span>' +
+      (parameter ? '<span>' + esc(parameter) + '</span>' : '') + '</div>' +
+      '<div class="why">' + esc(o.rationale || 'no rationale recorded') + '</div></div>';
+  }).join('') : '<div class="empty">No orders recorded for this turn.</div>';
+  if(d.preview){
+    html += '<div class="card"><div class="meta"><b>If materialised</b></div>' +
+      '<div style="font-size:12px">' +
+      (d.preview.written||[]).map(w => '✓ ' + esc(w)).join('<br>') +
+      ((d.preview.skipped||[]).length
+        ? '<br><span style="color:var(--bad)">' +
+          d.preview.skipped.map(s => '✗ ' + esc(s)).join('<br>') + '</span>' : '') +
+      '<br><span style="color:var(--dim)">' + (d.preview.changed_bytes||0) +
+      ' bytes would change</span></div></div>';
+  }
+  $('#p-orders').innerHTML = html;
+}
+
+async function loadNotes(){
+  const d = await get('/api/agent/scratchpad');
+  let html = '<div class="card"><div class="meta"><b>Working scratchpad</b></div>' +
+    '<textarea id="note-text" class="field" placeholder="Plan, threat, question, or commitment"></textarea>' +
+    '<div class="row"><input id="note-tag" class="field" placeholder="tag, e.g. threat">' +
+    '<label class="chk" style="padding:5px"><input id="note-pin" type="checkbox">pin</label>' +
+    '<button id="note-add" class="mini">Add</button></div>' +
+    '<div class="why">Open notes are inserted automatically. Resolve stale notes so they leave context; pin durable commitments.</div></div>';
+  html += (d.notes||[]).length ? d.notes.map(n =>
+    '<div class="card"><div class="meta"><span class="tag">' +
+    esc(n.tag || 'note') + '</span><span>turn ' + (n.turn ?? '—') + '</span>' +
+    (n.pinned ? '<span class="tag">pinned</span>' : '') +
+    (n.status === 'resolved' ? '<span class="tag">resolved</span>' : '') + '</div>' +
+    esc(n.note) + '<div class="row" style="margin-top:7px">' +
+    '<button class="ghost mini note-pin" data-id="'+n.id+'" data-pin="'+(n.pinned?0:1)+'">'+(n.pinned?'Unpin':'Pin')+'</button>' +
+    (n.status === 'open' ? '<button class="ghost mini note-resolve" data-id="'+n.id+'">Resolve</button>' : '') +
+    '</div></div>').join('') : '<div class="empty">No notes yet for this game.</div>';
+  $('#p-notes').innerHTML = html;
+  $('#note-add').onclick = async () => {
+    await apiFetch('/api/agent/scratchpad', {method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({note:$('#note-text').value,tag:$('#note-tag').value||null,pinned:$('#note-pin').checked})});
+    loadNotes();
+  };
+  document.querySelectorAll('.note-pin').forEach(b => b.onclick = async () => {
+    await apiFetch('/api/agent/scratchpad/'+b.dataset.id,{method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({pinned:b.dataset.pin==='1'})}); loadNotes();
+  });
+  document.querySelectorAll('.note-resolve').forEach(b => b.onclick = async () => {
+    await apiFetch('/api/agent/scratchpad/'+b.dataset.id,{method:'PATCH',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({status:'resolved'})}); loadNotes();
+  });
+}
+
+async function loadPlaybook(){
+  const d = await get('/api/agent/playbook');
+  let html = '<div class="card"><div class="meta"><b>Add player guidance</b></div>' +
+    '<input id="pb-title" class="field" placeholder="Short title">' +
+    '<textarea id="pb-guide" class="field" placeholder="The gotcha or rule the assistant should apply"></textarea>' +
+    '<input id="pb-triggers" class="field" placeholder="triggers, comma separated (e.g. mercenary, bid, auction)">' +
+    '<input id="pb-tags" class="field" placeholder="tags, comma separated">' +
+    '<div class="row"><select id="pb-scope" class="field"><option value="global">all games</option><option value="nation">this nation</option><option value="game">this campaign</option><option value="game_nation">this nation in this campaign</option></select>' +
+    '<input id="pb-priority" class="field" type="number" min="0" max="100" value="50" title="priority">' +
+    '<label class="chk" style="padding:5px" title="Inject into every model completion in scope"><input id="pb-always" type="checkbox">always inject</label></div>' +
+    '<button id="pb-add" class="mini" style="margin-top:7px">Add guidance</button>' +
+    '<div id="pb-error" class="why">Matching is literal and inspectable. Phrases match phrases; single words match whole words. “Always inject” guidance is included in every model completion, including continuations after tool results.</div></div>';
+  html += (d.entries||[]).map(p => '<div class="card"><div class="meta"><b>'+esc(p.title)+'</b>' +
+    '<span class="tag">priority '+p.priority+'</span>'+(p.enabled?'':'<span class="tag">archived</span>')+'</div>' +
+    esc(p.guidance)+'<div class="why">triggers: '+esc((p.triggers||[]).join(', ') || 'always') +
+    '<br>tags: '+esc((p.tags||[]).join(', ') || '—')+'</div>' +
+    (p.enabled?'<div class="row" style="margin-top:7px"><button class="ghost mini pb-edit" data-id="'+p.id+'">Edit</button><button class="ghost mini pb-archive" data-id="'+p.id+'">Archive</button></div>':'')+'</div>').join('');
+  $('#p-playbook').innerHTML = html;
+  $('#pb-add').onclick = async () => {
+    const csv = id => $(id).value.split(',').map(x=>x.trim()).filter(Boolean);
+    const body={title:$('#pb-title').value,guidance:$('#pb-guide').value,
+      triggers:csv('#pb-triggers'),tags:csv('#pb-tags'),scope:$('#pb-scope').value,
+      priority:Number($('#pb-priority').value),always_include:$('#pb-always').checked};
+    const editId=$('#pb-add').dataset.edit;
+    const r=await apiFetch(editId?'/api/agent/playbook/'+editId:'/api/agent/playbook',
+      {method:editId?'PUT':'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){ $('#pb-error').textContent='Could not save: '+await r.text(); return; }
+    loadPlaybook();
+  };
+  document.querySelectorAll('.pb-archive').forEach(b => b.onclick=async()=>{
+    await apiFetch('/api/agent/playbook/'+b.dataset.id,{method:'DELETE'}); loadPlaybook();
+  });
+  document.querySelectorAll('.pb-edit').forEach(b => b.onclick=()=>{
+    const p=(d.entries||[]).find(x=>String(x.id)===b.dataset.id); if(!p) return;
+    $('#pb-title').value=p.title; $('#pb-guide').value=p.guidance;
+    $('#pb-triggers').value=(p.triggers||[]).join(', '); $('#pb-tags').value=(p.tags||[]).join(', ');
+    $('#pb-priority').value=p.priority; $('#pb-always').checked=p.always_include;
+    $('#pb-scope').value=p.game_id!=null?(p.nation_id!=null?'game_nation':'game'):(p.nation_id!=null?'nation':'global');
+    $('#pb-add').dataset.edit=p.id; $('#pb-add').textContent='Save changes';
+    $('#p-playbook').scrollTop=0;
+  });
+}
+
+async function loadContext(query=''){
+  const latest=await get('/api/agent/context/latest');
+  const preview=await get('/api/agent/context/preview?query='+encodeURIComponent(query));
+  let html='<div class="card"><div class="meta"><b>Injection preview</b></div>'+
+    '<div class="row"><input id="ctx-query" class="field" placeholder="Test words or a proposed message" value="'+esc(query)+'">'+
+    '<button id="ctx-test" class="mini">Test</button></div>'+
+    '<div class="why">This is exactly what would be assembled, without contacting the model or recording a run.</div></div>';
+  html += '<div class="card"><div class="meta"><b>Would retrieve</b></div>' +
+    ((preview.playbook||[]).length ? preview.playbook.map(p=>'#'+p.id+' '+esc(p.title)+' — '+esc((p.matched_triggers||[]).join(', ')||'always')).join('<br>') : '<span style="color:var(--dim)">no player guidance</span>')+'</div>';
+  html += '<details class="card"><summary>Full assembled context</summary><pre>'+esc(preview.rendered||'')+'</pre></details>';
+  if(latest.run){
+    html += '<div class="card"><div class="meta"><b>Last actual invocation</b><span>turn '+latest.run.turn+'</span></div>'+
+      (latest.injections||[]).map(x=>'#'+x.playbook_entry_id+' '+esc(x.title)+' — '+esc(x.matched_triggers.join(', ')||'always')).join('<br>')+
+      '<div class="why">run '+latest.run.id+' · '+esc(latest.run.created_at)+'</div></div>';
+  }
+  $('#p-context').innerHTML=html;
+  $('#ctx-test').onclick=()=>loadContext($('#ctx-query').value);
+}
+
+async function loadDecisions(){
+  const d=await get('/api/agent/decisions?limit=150');
+  $('#p-decisions').innerHTML=(d.decisions||[]).length ? d.decisions.map(x=>
+    '<div class="card"><div class="meta"><span class="tag">turn '+x.turn+'</span><span class="tag">'+esc(x.category)+'</span><b>'+esc(x.subject)+'</b></div>'+
+    '<pre>'+esc(JSON.stringify(x.action,null,2))+'</pre><div class="why"><b>why:</b> '+esc(x.rationale||'no rationale recorded')+
+    (x.supersedes?'<br>revised '+esc(x.supersedes):'')+(x.previous_decision?'<br>previous: '+esc(x.previous_decision):'')+'</div></div>').join('') :
+    '<div class="empty">No recorded decisions yet.</div>';
+}
+
+async function loadLessons(){
+  const d = await get('/api/agent/lessons');
+  $('#p-lessons').innerHTML = (d.lessons||[]).length ? d.lessons.map(l =>
+    '<div class="card"><div class="meta"><span class="tag">' + esc(l.topic) +
+    '</span></div>' + esc(l.lesson) +
+    (l.evidence ? '<div class="why">evidence: ' + esc(l.evidence) + '</div>' : '') +
+    '</div>').join('') : '<div class="empty">No lessons recorded.</div>';
+}
+
+async function loadGaps(){
+  const d = await get('/api/agent/gaps');
+  $('#p-gaps').innerHTML = (d.gaps||[]).length ? d.gaps.map(g =>
+    '<div class="card"><div class="meta"><span class="tag ' + esc(g.outcome) + '">' +
+    esc(g.outcome) + '</span><b>' + esc(g.field) + '</b></div>' +
+    '<div style="font-size:12.5px">' + esc(g.finding) + '</div>' +
+    (g.unblock_test ? '<div class="why">would settle it: ' + esc(g.unblock_test) +
+      '</div>' : '') + '</div>').join('')
+    : '<div class="empty">Nothing recorded as blocked.</div>';
+}
+
+// ── character-card library ────────────────────────────────────────────────
+async function loadCharacter(){
+  const pane=$('#p-character'), scope=characterScope();
+  pane.innerHTML='<div class="empty">Loading character library…</div>';
+  try{
+    const d=await get('/api/agent/characters?scope_key='+encodeURIComponent(scope));
+    const me=(await get('/api/agent/persona')).persona||{name:'Player',description:''};
+    const binding=d.binding||{}, cards=d.cards||[];
+    const selected=cards.find(card=>card.id===binding.card_id);
+    const options='<option value="">No character</option>'+cards.map(card=>
+      '<option value="'+card.id+'"'+(card.id===binding.card_id?' selected':'')+'>'+esc(card.name)+
+      ' · '+esc(card.spec_version)+'</option>').join('');
+    const modes={
+      voice_only:'Voice only — style changes; strategic judgment does not.',
+      strategy_and_voice:'Strategy + voice — temperament breaks close strategic ties.',
+      full_character:'Full character — strong roleplay, still subordinate to tools and user instructions.'
+    };
+    let detail='';
+    if(selected){
+      const tags=(selected.tags||[]).map(tag=>'<span class="tag">'+esc(tag)+'</span>').join(' ');
+      detail='<div class="card">'+
+        (selected.has_avatar?'<img class="portrait" src="/api/agent/characters/'+selected.id+'/avatar" alt="">':'')+
+        '<div class="meta"><b>'+esc(selected.name)+'</b><span>'+esc(selected.spec)+' '+esc(selected.spec_version)+'</span></div>'+
+        (selected.creator?'<div>Creator: '+esc(selected.creator)+'</div>':'')+
+        (selected.character_version?'<div>Card version: '+esc(selected.character_version)+'</div>':'')+
+        '<div>Lore entries: '+selected.lore_entries+'</div><div style="margin-top:5px">'+tags+'</div>'+
+        (selected.creator_notes?'<div class="why"><b>Creator notes (display only)</b><br>'+esc(selected.creator_notes)+'</div>':'')+
+        '<div style="clear:both"></div></div>';
+    }
+    pane.innerHTML='<div class="card"><div class="meta"><b>Your persona</b></div>'+
+      '<div class="help">Who the character is talking to. The name fills every '+
+      '{{user}} in a card; the description is given as information about you, '+
+      'never as an instruction that could override the harness or the tools.</div>'+
+      '<input id="me-name" class="field" placeholder="your name" value="'+esc(me.name||'')+'">'+
+      '<textarea id="me-desc" class="field" rows="3" placeholder="how the character should see you">'+esc(me.description||'')+'</textarea>'+
+      '<div class="row" style="margin-top:6px"><button id="me-save" class="ghost mini">Save persona</button></div></div>'+
+      '<div class="card"><div class="meta"><b>Import SillyTavern card</b></div>'+
+      '<input id="char-file" type="file" accept=".json,.png,application/json,image/png">'+
+      '<button id="char-import" class="ghost mini">Import JSON or PNG</button>'+
+      '<div class="help">V1, V2, and V3 cards are accepted. The untouched source is retained; creator notes and unknown extensions are never silently inserted into the model prompt.</div></div>'+
+      '<div class="card"><div class="meta"><b>Binding</b><span>'+esc(scope)+'</span></div>'+
+      '<select id="char-select" class="field">'+options+'</select>'+
+      '<select id="char-mode" class="field">'+(d.influence_modes||[]).map(value=>
+        '<option value="'+value+'"'+(value===(binding.influence_mode||'strategy_and_voice')?' selected':'')+'>'+esc(value.replaceAll('_',' '))+'</option>').join('')+'</select>'+
+      '<div id="char-mode-help" class="help"></div><div class="row">'+
+      '<button id="char-bind" class="ghost mini">Save binding</button>'+
+      (selected?'<button id="char-greeting" class="ghost mini">Use first greeting</button>':'')+
+      '</div></div>'+
+      '<div class="card"><div class="meta"><b>Write a character</b></div>'+
+      '<div class="row"><button id="char-new" class="ghost mini">New character</button>'+
+      '<button id="char-edit" class="ghost mini">Edit selected</button>'+
+      '<button id="char-archive" class="ghost mini">Archive selected</button>'+
+      '</div><div class="help">Edit and Archive act on the card chosen above, which need not be the bound one \u2014 a character you have just written is not bound to anything yet. Written characters are stored as ordinary V3 cards, so they can be bound, exported and re-imported exactly like a downloaded one.</div>'+
+      '<div id="char-editor"></div></div>'+
+      detail+'<div id="char-preview"></div>';
+    const field=(id,label,value,rows)=>
+      '<label class="help" style="display:block;margin-top:7px">'+esc(label)+'</label>'+
+      (rows?'<textarea id="'+id+'" class="field" rows="'+rows+'">'+esc(value||'')+'</textarea>'
+           :'<input id="'+id+'" class="field" value="'+esc(value||'')+'">');
+
+    function openEditor(cardId, fields){
+      const box=$('#char-editor');
+      // Lore rows are held on the element rather than in a module variable so
+      // reopening the editor cannot inherit the previous character's entries.
+      box.dataset.cardId = cardId==null ? '' : String(cardId);
+      box.dataset.lore = JSON.stringify(fields.lore||[]);
+      box.innerHTML =
+        field('ce-name','Name (required)',fields.name)+
+        field('ce-description','Description — who they are',fields.description,3)+
+        field('ce-personality','Personality — how they judge',fields.personality,3)+
+        field('ce-scenario','Scenario — the situation they are in',fields.scenario,2)+
+        field('ce-first','First greeting',fields.first_mes,2)+
+        field('ce-system','System prompt (optional, overrides the default persona framing)',fields.system_prompt,2)+
+        field('ce-tags','Tags, comma separated',(fields.tags||[]).join(', '))+
+        '<div class="help" style="margin-top:9px"><b>Lore entries</b> — each is injected only when one of its keys appears in the conversation.</div>'+
+        '<div id="ce-lore"></div>'+
+        '<div class="row" style="margin-top:7px"><button id="ce-add" class="ghost mini">Add lore entry</button>'+
+        '<button id="ce-save" class="ghost mini">'+(cardId==null?'Create':'Save as new revision')+'</button>'+
+        '<button id="ce-cancel" class="ghost mini">Cancel</button></div>';
+      renderLore();
+      $('#ce-add').onclick=()=>{
+        const lore=JSON.parse(box.dataset.lore||'[]');
+        lore.push({keys:[],content:'',name:''});
+        box.dataset.lore=JSON.stringify(lore); renderLore();
+      };
+      $('#ce-cancel').onclick=()=>{ box.innerHTML=''; box.dataset.lore='[]'; };
+      $('#ce-save').onclick=()=>saveCharacter();
+    }
+
+    function renderLore(){
+      const box=$('#char-editor');
+      const lore=JSON.parse(box.dataset.lore||'[]');
+      $('#ce-lore').innerHTML = lore.length ? lore.map((entry,index)=>
+        '<div class="card" style="margin-top:6px">'+
+        '<input class="field ce-keys" data-i="'+index+'" placeholder="trigger keys, comma separated" value="'+esc((entry.keys||[]).join(', '))+'">'+
+        '<textarea class="field ce-content" data-i="'+index+'" rows="2" placeholder="what to inject">'+esc(entry.content||'')+'</textarea>'+
+        '<button class="ghost mini ce-drop" data-i="'+index+'" style="margin-top:5px">Remove</button></div>'
+      ).join('') : '<div class="help">No lore entries.</div>';
+      // Keep typing in the DOM rather than re-rendering on every keystroke.
+      $('#ce-lore').querySelectorAll('.ce-drop').forEach(button=>button.onclick=()=>{
+        const current=collectLore();
+        current.splice(Number(button.dataset.i),1);
+        box.dataset.lore=JSON.stringify(current); renderLore();
+      });
+    }
+
+    function collectLore(){
+      const rows=[...$('#ce-lore').querySelectorAll('.ce-content')];
+      return rows.map(area=>{
+        const index=area.dataset.i;
+        const keys=$('#ce-lore').querySelector('.ce-keys[data-i="'+index+'"]');
+        return {
+          content:area.value,
+          keys:(keys?keys.value:'').split(',').map(k=>k.trim()).filter(Boolean),
+          name:'',
+        };
+      });
+    }
+
+    async function saveCharacter(){
+      const box=$('#char-editor');
+      const name=$('#ce-name').value.trim();
+      if(!name){ alert('A character needs a name.'); return; }
+      const payload={
+        name,
+        description:$('#ce-description').value,
+        personality:$('#ce-personality').value,
+        scenario:$('#ce-scenario').value,
+        first_mes:$('#ce-first').value,
+        system_prompt:$('#ce-system').value,
+        tags:$('#ce-tags').value.split(',').map(t=>t.trim()).filter(Boolean),
+        lore:collectLore(),
+      };
+      const editing=box.dataset.cardId;
+      const response=await apiFetch(
+        editing ? '/api/agent/characters/'+editing : '/api/agent/characters/create',
+        {method: editing ? 'PUT' : 'POST',
+         headers:{'Content-Type':'application/json'},
+         body:JSON.stringify(payload)});
+      const result=await response.json();
+      if(!response.ok){ alert(problemText(result,'Could not save the character')); return; }
+      await loadCharacter();
+      const picker=$('#char-select');
+      if(picker && result.card) picker.value=String(result.card.id);
+    }
+
+    const pickedCard=()=>{
+      const id=$('#char-select').value;
+      if(!id){ alert('Choose a character above first.'); return null; }
+      return cards.find(card=>String(card.id)===String(id))||null;
+    };
+    $('#char-new').onclick=()=>openEditor(null,{lore:[]});
+    $('#char-edit').onclick=async()=>{
+      const card=pickedCard(); if(!card) return;
+      const loaded=await get('/api/agent/characters/'+card.id+'/fields');
+      openEditor(card.id, loaded.fields||{lore:[]});
+    };
+    $('#char-archive').onclick=async()=>{
+      const card=pickedCard(); if(!card) return;
+      if(!confirm('Archive '+card.name+'? It leaves the list; existing '
+                  +'revisions and injection logs are retained.')) return;
+      const response=await apiFetch('/api/agent/characters/'+card.id,{method:'DELETE'});
+      if(!response.ok){
+        const result=await response.json().catch(()=>({}));
+        alert(problemText(result,'Could not archive that character')); return;
+      }
+      loadCharacter();
+    };
+
+    $('#me-save').onclick=async()=>{
+      const response=await apiFetch('/api/agent/persona',{method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({name:$('#me-name').value,
+                             description:$('#me-desc').value})});
+      const result=await response.json();
+      if(!response.ok){ alert(problemText(result,'Could not save your persona')); return; }
+      loadCharacter();
+    };
+
+    const explain=()=>{$('#char-mode-help').textContent=modes[$('#char-mode').value]||'';};
+    explain(); $('#char-mode').onchange=explain;
+    $('#char-import').onclick=async()=>{
+      const file=$('#char-file').files[0];
+      if(!file){ alert('Choose a SillyTavern JSON or PNG card first.'); return; }
+      if(file.size>16*1024*1024){ alert('Card exceeds the 16 MiB import limit.'); return; }
+      const bytes=new Uint8Array(await file.arrayBuffer()); let binary='';
+      for(let offset=0;offset<bytes.length;offset+=0x8000){
+        binary+=String.fromCharCode(...bytes.subarray(offset,offset+0x8000));
+      }
+      const response=await apiFetch('/api/agent/characters/import',{method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({filename:file.name,content_base64:btoa(binary)})});
+      const result=await response.json();
+      if(!response.ok){ alert(problemText(result,'Import failed')); return; }
+      await loadCharacter();
+      const fresh=$('#char-select'); if(fresh) fresh.value=String(result.card.id);
+    };
+    $('#char-bind').onclick=async()=>{
+      const card=$('#char-select').value;
+      const response=await apiFetch('/api/agent/characters/binding',{method:'PUT',
+        headers:{'Content-Type':'application/json'},body:JSON.stringify({
+          scope_key:scope,card_id:card?Number(card):null,influence_mode:$('#char-mode').value})});
+      const result=await response.json();
+      if(!response.ok){ alert(problemText(result,'Could not save binding')); return; }
+      loadCharacter();
+    };
+    if(selected){
+      $('#char-greeting').onclick=async()=>{
+        const preview=await get('/api/agent/characters/preview?scope_key='+encodeURIComponent(scope));
+        const choices=[preview.context&&preview.context.first_message,
+          ...((preview.context&&preview.context.alternate_greetings)||[])].filter(Boolean);
+        if(!choices.length){ alert('This card has no first or alternate greeting.'); return; }
+        let greeting=choices[0];
+        if(choices.length>1){
+          const numbered=choices.map((value,index)=>(index+1)+': '+value.slice(0,90)).join('\n');
+          const chosen=prompt('Choose greeting 1-'+choices.length+':\n\n'+numbered,'1');
+          if(chosen===null) return;
+          const index=Number(chosen)-1;
+          if(!Number.isInteger(index)||index<0||index>=choices.length){ alert('Invalid greeting number.'); return; }
+          greeting=choices[index];
+        }
+        if(history.length && !confirm('This conversation is not empty. Add the character greeting anyway?')) return;
+        const exchange=newExchangeId();
+        history.push({role:'assistant',content:greeting,_exchange:exchange});
+        bubble('bot',greeting,true,exchange); saveChat();
+      };
+    }
+    const compactHistory=history.slice(-8).map(message=>({role:message.role,
+      content:String(message.content||'').slice(-2000)}));
+    const previewUrl='/api/agent/characters/preview?scope_key='+encodeURIComponent(scope)+
+      '&query='+encodeURIComponent(input.value)+'&history_json='+encodeURIComponent(JSON.stringify(compactHistory));
+    const preview=await get(previewUrl), context=preview.context||{};
+    if(context.card_id){
+      $('#char-preview').innerHTML='<div class="card"><div class="meta"><b>Exact next-invocation preview</b><span>revision '+context.revision_id+'</span></div>'+
+        '<div class="why">Matched lore: '+(context.matched_lore||[]).map(item=>esc(item.name||('entry '+item.entry_index))+' ['+esc((item.matched_keys||[]).join(', '))+']').join('; ')+'</div>'+
+        '<pre>'+esc([context.lore_before,context.persona_prompt,context.lore_after,
+          context.post_history_prompt&&('POST-HISTORY\n'+context.post_history_prompt)].filter(Boolean).join('\n\n'))+'</pre></div>'+
+        '<div class="card"><div class="meta"><b>Recent actual injections</b></div>'+
+        ((preview.recent_injections||[]).map(run=>'<div class="why">'+esc(run.created_at)+' · revision '+run.revision_id+' · lore ids '+esc((run.matched_lore_ids||[]).join(', ')||'none')+' · '+run.rendered_chars+' chars</div>').join('')||'<div class="empty">No model invocation has used this binding yet.</div>')+'</div>';
+    }
+  }catch(error){ pane.innerHTML='<div class="empty">Character library unavailable: '+esc(error.message)+'</div>'; }
+}
+
+// ── model profile editor ───────────────────────────────────────────────────
+// Every model wraps its reasoning differently and there is no standard, so the
+// markers are configuration. Getting them wrong is not obvious from the
+// outside — the run shows the whole chain of thought as the answer, or shows
+// nothing — which is why there is a preview against pasted output.
+let profileState = null;
+
+async function loadModel(force=false){
+  const pane = $('#p-model');
+  // Tab switches merely hide this pane. Rebuilding it here would replace
+  // every unsaved field with the last saved profile values.
+  if(!force && pane.dataset.loaded === 'true') return;
+  const d = await get('/api/agent/profiles');
+  profileState = d;
+  const opts = d.profiles.map(p =>
+    '<option value="' + esc(p.name) + '"' +
+    (p.name === d.active ? ' selected' : '') + '>' + esc(p.name) +
+    (p.name === d.active ? ' (active)' : '') + '</option>').join('');
+  const p = d.profiles.find(x => x.name === d.active) || d.profiles[0];
+  $('#p-model').innerHTML =
+    // The endpoint lives in the config file rather than in a profile, but
+    // making people edit TOML to point at their own model was the worst part
+    // of setting this up.
+    '<div class="card"><div class="meta"><b>Model endpoint</b></div>' +
+    '<label class="help" style="display:block">Server address \u2014 must end in /v1</label>' +
+    '<input id="ep-url" class="field" placeholder="http://localhost:5001/v1">' +
+    '<label class="help" style="display:block;margin-top:6px">Model \u2014 <code>auto</code> asks the server; hosted providers need the exact name</label>' +
+    '<input id="ep-model" class="field" placeholder="auto">' +
+    '<label class="help" style="display:block;margin-top:6px">API key \u2014 leave blank for a local server</label>' +
+    '<input id="ep-key" class="field" type="password" placeholder="(none)" autocomplete="off">' +
+    '<div class="row" style="margin-top:7px">' +
+      '<button class="ghost mini" id="ep-test">Test connection</button>' +
+      '<button class="ghost mini" id="ep-save">Save endpoint</button></div>' +
+    '<div id="ep-out" class="help"></div></div>' +
+
+    '<div class="card"><div class="meta"><b>Profile</b></div>' +
+    '<select id="pf-sel" style="width:100%;background:var(--panel);color:var(--text);' +
+      'border:1px solid var(--line);border-radius:6px;padding:6px">' + opts + '</select>' +
+    '<div style="display:flex;gap:6px;margin-top:8px">' +
+      '<button class="ghost" id="pf-activate">Activate</button>' +
+      '<button class="ghost" id="pf-save">Save</button>' +
+    '</div></div>' +
+
+    '<div class="card"><div class="meta"><b>Tool calling</b></div>' +
+    '<select id="pf-tool" style="width:100%;background:var(--panel);color:var(--text);' +
+      'border:1px solid var(--line);border-radius:6px;padding:6px">' +
+      d.tool_modes.map(m => '<option value="'+m+'"' +
+        (m===p.tool_mode?' selected':'') + '>' + m + '</option>').join('') +
+    '</select>' +
+    '<div class="why">auto probes the endpoint. native skips the probe. ' +
+    'text puts the tool list in the prompt — slower, but the only way to see ' +
+    'reasoning from a model whose server returns empty content beside a tool ' +
+    'call.</div></div>' +
+
+    '<div class="card"><div class="meta"><b>Reasoning markers</b></div>' +
+    '<input id="pf-rs" placeholder="start, e.g. &lt;think&gt;" value="' +
+      esc(p.reasoning_start) + '" style="width:100%;margin-bottom:6px">' +
+    '<input id="pf-re" placeholder="end, e.g. &lt;/think&gt; (blank = to next start)" value="' +
+      esc(p.reasoning_end) + '" style="width:100%">' +
+    '<div class="why">Leave both blank to show everything the model writes. ' +
+    'An empty end means the block runs to the next start marker or the end of ' +
+    'the text.</div>' +
+    '<label style="font-size:12px;color:var(--dim);display:block;margin-top:8px">prefill</label>' +
+    '<input id="pf-pre" placeholder="e.g. &lt;|channel&gt;thought" value="' +
+      esc(p.prefill || '') + '" style="width:100%">' +
+    '<div class="why">Put words in the model\'s mouth. Sent as a trailing ' +
+    'assistant message, which the server continues rather than answers — this ' +
+    'is what makes a thinking block reliable instead of occasional. ' +
+    '<b>Leave this blank if the server already returns reasoning in its own ' +
+    'field</b> (llama.cpp and vLLM send reasoning_content beside the answer): ' +
+    'the trailing turn suppresses that channel, and the thinking disappears ' +
+    'instead of arriving separately.</div>' +
+    '<label style="display:flex;align-items:center;gap:7px;margin-top:9px;font-size:12px;color:var(--text)">' +
+      '<input id="pf-preserve-tool-reasoning" type="checkbox" style="width:auto"' +
+      (p.preserve_tool_reasoning ? ' checked' : '') + '> Preserve reasoning in tool-call history</label>' +
+    '<div class="why">Keeps a model\'s reasoning only on assistant turns that ' +
+    'invoke a tool, so the next completion can continue rather than reconstruct ' +
+    'the same analysis. Disable this for models whose chat template does not ' +
+    'accept historical reasoning.</div>' +
+    '<textarea id="pf-test" placeholder="paste a raw completion to test the markers" ' +
+      'style="width:100%;height:60px;margin-top:8px"></textarea>' +
+    '<button class="ghost" id="pf-preview" style="margin-top:6px">Test split</button>' +
+    '<div id="pf-out"></div></div>' +
+
+    '<div class="card"><div class="meta"><b>Sampling</b></div>' +
+    '<label style="font-size:12px;color:var(--dim)">temperature</label>' +
+    '<input id="pf-temp" type="number" step="0.05" min="0" max="2" value="' +
+      p.temperature + '" style="width:100%;margin-bottom:6px">' +
+    '<label style="font-size:12px;color:var(--dim)">max tokens</label>' +
+    '<input id="pf-max" type="number" step="100" min="100" value="' +
+      p.max_tokens + '" style="width:100%;margin-bottom:6px">' +
+    '<label style="font-size:12px;color:var(--dim)">request timeout (seconds)</label>' +
+    '<input id="pf-timeout" type="number" step="60" min="0" value="' +
+      p.request_timeout + '" style="width:100%">' +
+    '<div class="why">Deadline for each model completion, not the complete agent run. ' +
+      'Use 0 for no deadline. The default is 300 seconds.</div></div>' +
+
+    '<div class="card"><div class="meta"><b>System prompt</b></div>' +
+    '<textarea id="pf-sys" style="width:100%;height:220px" placeholder="blank = use the built-in prompt">' +
+      esc(p.system_prompt) + '</textarea>' +
+    '<button class="ghost" id="pf-load-default" style="margin-top:6px">Load built-in</button>' +
+    '<div class="why">{nation} and {turn} are substituted. Blank uses the ' +
+    'built-in prompt, so it keeps improving instead of being frozen here. Every save creates a recoverable revision.</div></div>' +
+
+    '<div class="card"><div class="meta"><b>Saved revisions</b></div><div id="pf-revisions" class="why">loading…</div></div>' +
+
+    (p.notes ? '<div class="card"><div class="meta"><b>Notes</b></div>' +
+      '<div style="font-size:12px;color:var(--dim)">' + esc(p.notes) + '</div></div>' : '');
+  pane.dataset.loaded = 'true';
+
+  document.querySelectorAll('#p-model input, #p-model textarea').forEach(el => {
+    el.style.background = 'var(--panel)'; el.style.color = 'var(--text)';
+    el.style.border = '1px solid var(--line)'; el.style.borderRadius = '6px';
+    el.style.padding = '6px'; el.style.fontFamily = 'inherit';
+    el.style.fontSize = '12.5px';
+  });
+
+  // -- endpoint ---------------------------------------------------------
+  (async () => {
+    const out = $('#ep-out');
+    try{
+      const cfg = await (await fetch('/api/settings')).json();
+      const openai = (cfg.backends || {}).openai || {};
+      $('#ep-url').value = (openai.extra || {}).base_url || '';
+      $('#ep-model').value = openai.model || '';
+      out.textContent = openai.key_is_set
+        ? 'A key is configured. Leave the field blank to keep it.'
+        : 'No key configured, which is normal for a local server.';
+    }catch(error){ out.textContent = 'Could not read the current settings.'; }
+
+    const payload = () => ({
+      base_url: $('#ep-url').value.trim(),
+      model: $('#ep-model').value.trim() || 'auto',
+      api_key: $('#ep-key').value,
+    });
+
+    $('#ep-test').onclick = async () => {
+      out.textContent = 'Testing\u2026';
+      const response = await fetch('/api/settings/test', {method:'POST',
+        headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload())});
+      const result = await response.json();
+      if(result.ok){
+        out.innerHTML = 'Reached it. ' + result.count + ' model(s) available' +
+          (result.models && result.models.length
+            ? ': <code>' + result.models.slice(0,4).map(esc).join('</code> <code>') + '</code>'
+            : '.');
+      }else{
+        out.innerHTML = '<b style="color:var(--bad)">Could not reach it.</b> ' +
+          esc(result.hint || '') + '<br><span style="opacity:.7">' +
+          esc(result.error || '') + '</span>';
+      }
+    };
+
+    $('#ep-save').onclick = async () => {
+      const fields = payload();
+      // An untouched key field must not overwrite the stored one with "".
+      if(!fields.api_key) delete fields.api_key;
+      const response = await fetch('/api/settings', {method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({active_backend:'openai', backends:{openai:fields}})});
+      const result = await response.json();
+      if(!response.ok){ out.textContent = problemText(result,'Could not save'); return; }
+      $('#ep-key').value = '';
+      out.textContent = 'Saved. It applies to the next message; no restart needed.';
+    };
+  })();
+
+  $('#pf-sel').onchange = async e => {
+    const sel = d.profiles.find(x => x.name === e.target.value);
+    if(!sel) return;
+    $('#pf-tool').value = sel.tool_mode;
+    $('#pf-rs').value = sel.reasoning_start; $('#pf-re').value = sel.reasoning_end;
+    $('#pf-pre').value = sel.prefill || '';
+    $('#pf-preserve-tool-reasoning').checked = !!sel.preserve_tool_reasoning;
+    $('#pf-temp').value = sel.temperature; $('#pf-max').value = sel.max_tokens;
+    $('#pf-timeout').value = sel.request_timeout;
+    $('#pf-sys').value = sel.system_prompt;
+    loadProfileRevisions(sel.name);
+  };
+  $('#pf-load-default').onclick = () => { $('#pf-sys').value = d.default_system_prompt; };
+  $('#pf-activate').onclick = async () => {
+    await apiFetch('/api/agent/profiles/' + encodeURIComponent($('#pf-sel').value) +
+                '/activate', {method:'POST'});
+    loadModel(true); loadState();
+  };
+  $('#pf-save').onclick = async () => {
+    const body = {name:$('#pf-sel').value, system_prompt:$('#pf-sys').value,
+      reasoning_start:$('#pf-rs').value, reasoning_end:$('#pf-re').value,
+      prefill:$('#pf-pre').value,
+      preserve_tool_reasoning:$('#pf-preserve-tool-reasoning').checked,
+      tool_mode:$('#pf-tool').value, temperature:parseFloat($('#pf-temp').value),
+      max_tokens:parseInt($('#pf-max').value,10),
+      request_timeout:parseInt($('#pf-timeout').value,10)};
+    const r = await apiFetch('/api/agent/profiles', {method:'PUT',
+      headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    $('#pf-out').innerHTML = '<div class="why">' +
+      (r.ok ? 'saved' : 'save failed: ' + await r.text()) + '</div>';
+    if(r.ok) loadModel(true);
+  };
+  $('#pf-preview').onclick = async () => {
+    const r = await apiFetch('/api/agent/profiles/preview', {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:$('#pf-test').value,
+        reasoning_start:$('#pf-rs').value, reasoning_end:$('#pf-re').value})});
+    const s = await r.json();
+    $('#pf-out').innerHTML =
+      '<div class="why"><b>reasoning</b><br>' +
+      (esc(s.reasoning) || '<i>none matched</i>') + '</div>' +
+      '<div class="why"><b>shown as answer</b><br>' +
+      (esc(s.visible) || '<i>nothing</i>') + '</div>';
+  };
+  loadProfileRevisions(p.name);
+}
+
+async function loadProfileRevisions(name){
+  const target=$('#pf-revisions'); if(!target) return;
+  const d=await get('/api/agent/profiles/'+encodeURIComponent(name)+'/revisions?limit=12');
+  target.innerHTML=(d.revisions||[]).length ? d.revisions.map(r=>
+    '<div style="padding:5px 0;border-bottom:1px solid var(--line)">#'+r.id+' · '+esc(r.saved_at)+
+    ' <button class="ghost mini pf-restore" data-id="'+r.id+'" data-name="'+esc(name)+'">Restore</button></div>').join('') :
+    'No saved revisions yet. The next Save will create one.';
+  document.querySelectorAll('.pf-restore').forEach(b=>b.onclick=async()=>{
+    await apiFetch('/api/agent/profiles/'+encodeURIComponent(b.dataset.name)+'/revisions/'+b.dataset.id+'/restore',{method:'POST'});
+    loadModel(true);
+  });
+}
+
+const loaders = {orders:loadOrders, notes:loadNotes, playbook:loadPlaybook,
+                 context:loadContext, decisions:loadDecisions, lessons:loadLessons,
+                 gaps:loadGaps, activity:async()=>{}, character:loadCharacter,
+                 tools:async()=>{}, model:loadModel};
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.remove('sel'));
+  document.querySelectorAll('.pane').forEach(x => x.classList.remove('sel'));
+  b.classList.add('sel'); $('#p-' + b.dataset.p).classList.add('sel');
+  loaders[b.dataset.p]();
+});
+
+// ── chat ───────────────────────────────────────────────────────────────────
+$('#w').onchange = e => {
+  if(!e.target.checked && $('#auto').checked){
+    $('#auto').checked = false;
+    send.textContent = 'Send';
+  }
+  const warn = $('#writewarn');
+  warn.style.display = e.target.checked ? 'block' : 'none';
+  warn.textContent = isPretender()
+    ? 'Writes enabled — the assistant can create a new saved-god .2h file. Existing designs are never overwritten.'
+    : 'Writes enabled — the assistant can record orders and write the .2h file. It must still call materialize_orders with confirm=true to touch the game file.';
+  saveControls();
+};
+$('#auto').onchange = e => {
+  if(e.target.checked && !$('#w').checked){
+    $('#w').checked = true;
+    $('#w').onchange({target:$('#w')});
+  }
+  send.textContent = isPretender() && e.target.checked ? 'Run autonomously' : 'Send';
+  saveControls();
+};
+$('#th').onchange = () => { updateThinkingVisibility(); saveControls(); };
+$('#stream').onchange = saveControls;
+maxSteps.onchange = saveControls;
+
+input.addEventListener('keydown', e => {
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); form.requestSubmit(); }
+});
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 150) + 'px';
+});
+
+function userMessage(exchange){
+  return history.find(message =>
+    message.role === 'user' && message._exchange === exchange);
+}
+
+function prepareRetry(exchange){
+  const index = history.findIndex(message =>
+    message.role === 'user' && message._exchange === exchange);
+  if(index < 0) return null;
+  const hasLaterPrompt = history.slice(index + 1).some(message =>
+    message.role === 'user');
+  if(hasLaterPrompt &&
+      !confirm('Retrying this earlier prompt will discard every later message. Continue?')){
+    return null;
+  }
+  const text = history[index].content;
+  history = history.slice(0, index + 1);
+  const kept = new Set(history.map(message => message._exchange));
+  transcript = transcript.filter(entry =>
+    kept.has(entry._exchange) &&
+    (entry._exchange !== exchange || entry.kind === 'user'));
+  saveChat(); renderTranscript();
+  return text;
+}
+
+function retryExchange(exchange){
+  const text = prepareRetry(exchange);
+  if(text != null) submitPrompt(text, exchange, true);
+}
+
+// ── inline message editing ─────────────────────────────────────────────────
+// The message itself becomes the editor. A modal prompt() could not be resized
+// or scrolled, showed no surrounding conversation, and lost the text outright
+// if it was dismissed by accident.
+function editInline(bubbleElement, current, label, onSave){
+  if(!bubbleElement || bubbleElement.dataset.editing === 'true') return;
+  bubbleElement.dataset.editing = 'true';
+  const body = bubbleElement.querySelector('.body');
+  const actions = bubbleElement.querySelector('.msg-actions');
+  const editor = document.createElement('textarea');
+  editor.className = 'msg-editor';
+  editor.value = current;                  // the source text, not the rendering
+  const bar = document.createElement('div');
+  bar.className = 'msg-editor-bar';
+  bar.innerHTML = '<button type="button" data-do="save">' + esc(label) + '</button>' +
+    '<button type="button" class="ghost" data-do="cancel">Cancel</button>' +
+    '<span class="hint">Ctrl+Enter saves · Esc cancels</span>';
+  if(body) body.style.display = 'none';
+  if(actions) actions.style.display = 'none';
+  bubbleElement.appendChild(editor);
+  bubbleElement.appendChild(bar);
+
+  const close = () => {
+    editor.remove(); bar.remove();
+    if(body) body.style.display = '';
+    if(actions) actions.style.display = '';
+    delete bubbleElement.dataset.editing;
+  };
+  const commit = () => {
+    const value = editor.value.trim();
+    if(!value){ close(); return; }          // emptying is a cancel, not a delete
+    close();
+    onSave(value);
+  };
+  bar.querySelector('[data-do="save"]').onclick = commit;
+  bar.querySelector('[data-do="cancel"]').onclick = close;
+  editor.onkeydown = event => {
+    if(event.key === 'Escape'){ event.preventDefault(); close(); }
+    else if(event.key === 'Enter' && (event.ctrlKey || event.metaKey)){
+      event.preventDefault(); commit();
+    }
+  };
+  editor.style.height = 'auto';
+  editor.style.height = Math.min(Math.max(editor.scrollHeight, 70), 400) + 'px';
+  editor.focus();
+  editor.setSelectionRange(editor.value.length, editor.value.length);
+}
+
+function bubbleFor(exchange, kind){
+  return [...log.querySelectorAll('.msg.' + kind)].find(
+    element => element.dataset.exchange === exchange) || null;
+}
+
+function editAndRetry(exchange, bubbleElement){
+  const message = userMessage(exchange); if(!message) return;
+  editInline(bubbleElement || bubbleFor(exchange, 'user'), message.content,
+             'Save & retry', changed => {
+    const text = prepareRetry(exchange); if(text == null) return;
+    message.content = changed;
+    const visible = transcript.find(entry =>
+      entry.kind === 'user' && entry._exchange === exchange);
+    if(visible) visible.text = message.content;
+    saveChat(); renderTranscript();
+    submitPrompt(message.content, exchange, true);
+  });
+}
+
+function deleteExchange(exchange){
+  if(!confirm('Delete this prompt, its response, and its tool activity?')) return;
+  history = history.filter(message => message._exchange !== exchange);
+  transcript = transcript.filter(entry => entry._exchange !== exchange);
+  saveChat(); renderTranscript();
+}
+
+function deleteResponse(exchange){
+  history = history.filter(message =>
+    !(message.role === 'assistant' && message._exchange === exchange));
+  transcript = transcript.filter(entry =>
+    entry._exchange !== exchange || entry.kind === 'user');
+  saveChat(); renderTranscript();
+}
+
+function editResponse(exchange, bubbleElement){
+  const message = history.find(item =>
+    item.role === 'assistant' && item._exchange === exchange);
+  const visible = transcript.find(entry =>
+    entry.kind === 'bot' && entry._exchange === exchange);
+  if(!message || !visible) return;
+  editInline(bubbleElement || bubbleFor(exchange, 'bot'), visible.text,
+             'Save', changed => {
+    visible.text = changed;
+    const marker = '\n\nFinal answer:\n';
+    const markerAt = message.content.lastIndexOf(marker);
+    message.content = markerAt >= 0
+      ? message.content.slice(0, markerAt + marker.length) + visible.text
+      : visible.text;
+    saveChat(); renderTranscript();
+  });
+}
+
+retryLast.onclick = () => {
+  const exchange = latestUserExchange();
+  if(exchange) retryExchange(exchange);
+};
+
+stopRun.onclick = () => {
+  if(!busy || !currentRun) return;
+  const active=currentRun;
+  active.userCancelled=true;
+  stopRun.disabled=true; stopRun.textContent='Stopping…';
+  // This request deliberately does not share the generation's AbortController:
+  // it must reach the server while the response stream is being torn down.
+  void apiFetch('/api/agent/cancel', {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({run_id:active.id})}).catch(()=>{});
+  active.controller.abort();
+  if(!active.cancelShown){
+    bubble('cancelled',
+      'Assistant run stopped. No later tool calls from it will be executed.',
+      true,active.exchange);
+    active.cancelShown=true;
+  }
+  // Restore the exact request for the common stop/edit/send workflow. The
+  // original attempt remains visibly marked as cancelled in history.
+  input.value=active.prompt;
+  input.dispatchEvent(new Event('input'));
+  input.focus();
+};
+
+form.onsubmit = e => {
+  e.preventDefault();
+  const text = input.value.trim();
+  if(!text || busy) return;
+  submitPrompt(text);
+};
+
+async function submitPrompt(text, exchange=null, reuse=false){
+  if(busy) return;
+  exchange = exchange || newExchangeId();
+  busy = true; send.disabled = true;
+  const runId=(globalThis.crypto&&crypto.randomUUID)
+    ? crypto.randomUUID()
+    : Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+  const controller=new AbortController();
+  currentRun={id:runId,controller,prompt:text,exchange,
+              userCancelled:false,cancelShown:false};
+  stopRun.style.display=''; stopRun.disabled=false; stopRun.textContent='Stop';
+  updateChatControls();
+  if(!reuse){
+    bubble('user', text, true, exchange);
+    history.push({role:'user', content:text, _exchange:exchange});
+    saveChat();
+  }
+  input.value = ''; input.style.height = 'auto';
+
+  let buf = '', pending = null, finalText = '', retained = false;
+  // Bubbles being grown by streamed deltas, one per channel.
+  const streaming = {think:null, bot:null};
+  let continuationNotice = null;
+
+  function clearContinuationNotice(){
+    if(continuationNotice){ continuationNotice.remove(); continuationNotice = null; }
+  }
+  function showContinuationNotice(){
+    clearContinuationNotice(); clearActivityEmpty();
+    continuationNotice = document.createElement('div');
+    continuationNotice.className = 'activity-note continuation';
+    continuationNotice.textContent =
+      'Tool result delivered to the assistant. Waiting for its next response…';
+    activity.appendChild(continuationNotice);
+    activity.scrollTop = activity.scrollHeight;
+  }
+
+  function retainRunForNextMessage(){
+    if(retained) return;
+    retained = true;
+    // Tool calls/results remain in transcript Activity for inspection. Putting
+    // them in an assistant-role history message makes the model treat harness
+    // evidence as prose it previously authored and sometimes echo it.
+    if(finalText){
+      history.push({role:'assistant', content:finalText, _exchange:exchange});
+      saveChat();
+    }
+  }
+
+  function retireStreamedStep(){
+    // A delta is provisional: until completion we do not know whether it is a
+    // final answer or narration plus a text-protocol tool call. At any tool or
+    // failure boundary discard provisional answer text. Parsed narration is
+    // retained separately in chat by the authoritative `text` event.
+    if(streaming.think){
+      transcript.push({kind:'think', text:streaming.think.dataset.raw || '',
+                       _exchange:exchange});
+      streaming.think = null;
+      saveChat();
+    }
+    if(streaming.bot){ streaming.bot.remove(); streaming.bot = null; }
+  }
+
+  function acceptBlock(part){
+    const payload = part.split('\n').filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).trimStart()).join('\n').trim();
+    if(!payload || payload === '[DONE]') return;
+    let ev;
+    try{ ev = JSON.parse(payload); }
+    catch(error){ bubble('err', 'Could not parse an assistant stream event: ' + payload, true, exchange); return; }
+    if(ev.kind !== 'tool_result') clearContinuationNotice();
+
+    if(ev.kind === 'delta' && ev.text){
+      // A streamed fragment. It grows an already-open bubble rather than
+      // making one per token; the matching `done` still carries the whole
+      // text, so the saved transcript holds a message and not a pile of bits.
+      const cls = ev.channel === 'reasoning' ? 'think' : 'bot';
+      if(!streaming[cls]) streaming[cls] = bubble(cls, '', false, exchange);
+      streaming[cls].dataset.raw = (streaming[cls].dataset.raw || '') + ev.text;
+      const body = streaming[cls].querySelector('.body');
+      if(cls === 'bot'){
+        body.className = 'body md';
+        body.innerHTML = renderMarkdown(streaming[cls].dataset.raw);
+      }else{
+        body.textContent = streaming[cls].dataset.raw;
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+    else if(ev.kind === 'reasoning' && ev.text)  { bubble('think', ev.text, true, exchange); }
+    else if(ev.kind === 'text' && ev.text)  {
+      // `text` is narration emitted immediately before a tool call, not a
+      // finished answer. Show it as explicitly labelled progress in chat so a
+      // human can follow the assistant without opening the Activity drawer.
+      bubble('progress', ev.text, true, exchange);
+    }
+    else if(ev.kind === 'tool_call')       {
+      retireStreamedStep();
+      pending = {
+        card:toolCard(ev.tool, ev.args, true, exchange),
+        name:ev.tool, args:ev.args,
+      };
+      showActivity();
+    }
+    else if(ev.kind === 'tool_result')     {
+      retireStreamedStep();
+      if(pending){
+        fillTool(pending.card, ev.result);
+        pending = null;
+      }else{
+        const card = toolCard(ev.tool || '(unpaired result)', {}, true, exchange);
+        fillTool(card, ev.result);
+      }
+      showContinuationNotice();
+    }
+    else if(ev.kind === 'error')           {
+      retireStreamedStep(); bubble('err', ev.text, true, exchange);
+    }
+    else if(ev.kind === 'cancelled')       {
+      retireStreamedStep();
+      if(currentRun) currentRun.cancelShown=true;
+      bubble('cancelled',ev.text||'Assistant run stopped.',true,exchange);
+    }
+    else if(ev.kind === 'done' && ev.text){
+      // Retire the streamed bubbles. The thinking is kept exactly as shown;
+      // the answer is replaced by one rendered from the authoritative text.
+      retireStreamedStep();
+      bubble('bot', ev.text, true, exchange); finalText = ev.text;
+    }
+  }
+
+  try{
+    // Do not send the just-added user message twice: TurnAgent appends
+    // `message` after it receives the prior conversation as `history`.
+    const priorHistory = history.slice(0, -1)
+      .map(cleanHistoryMessage).filter(Boolean).map(message => ({
+        role:message.role, content:message.content,
+      }));
+    const endpoint = isOpenChat() ? '/api/agent/open/chat'
+                   : isPretender() ? '/api/agent/pretender/chat'
+                   : '/api/agent/chat';
+    const request = {message:text, allow_writes:$('#w').checked,
+                     stream:$('#stream').checked,
+                     max_steps:Math.max(1,Math.min(500,parseInt(maxSteps.value,10)||24)),
+                     history:priorHistory, run_id:runId};
+    if(!isPretender() && !isOpenChat()) request.game=gameProfile.value;
+    if(isPretender()){
+      request.nation_id = Number(designNation.value);
+      request.autonomous = $('#auto').checked;
+    }
+    const res = await apiFetch(endpoint, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(request), signal:controller.signal
+    });
+
+    if(!res.ok) throw new Error(res.status + ' ' + await res.text());
+    if(!res.body) throw new Error('the browser did not provide a response stream');
+
+    const reader = res.body.getReader(), dec = new TextDecoder();
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      buf += dec.decode(value, {stream:true});
+      // sse-starlette correctly uses CRLF by default. The old decoder looked
+      // only for LF-LF, so a completed answer remained stranded in `buf`.
+      buf = buf.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      const parts = buf.split('\n\n'); buf = parts.pop();
+      parts.forEach(acceptBlock);
+    }
+    buf += dec.decode();
+    buf = buf.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    if(buf.trim()) acceptBlock(buf);
+    retainRunForNextMessage();
+  }catch(error){
+    if(error.name==='AbortError'){
+      if(currentRun&&!currentRun.cancelShown){
+        bubble('cancelled',
+          'Assistant run stopped. No later tool calls from it will be executed.',
+          true,exchange);
+        currentRun.cancelShown=true;
+      }
+    }else{
+      bubble('err', 'Request failed: ' + error.message, true, exchange);
+    }
+    retainRunForNextMessage();
+  }finally{
+    clearContinuationNotice();
+    busy = false; send.disabled = false;
+    currentRun = null;
+    stopRun.style.display='none'; stopRun.disabled=false; stopRun.textContent='Stop';
+    updateChatControls();
+    loadState(); loadIngest();
+    loaders[document.querySelector('nav button.sel').dataset.p]();
+  }
+}
+
+$('#clear-chat').onclick = () => {
+  if(busy) return;
+  const meta = activeConversation();
+  // Emptying a named chat keeps its name and its place in the list; Delete is
+  // the control that removes it.
+  if(!confirm(meta
+      ? 'Clear every message in "' + meta.title + '"? The chat itself stays.'
+      : 'Clear the saved assistant conversation in this browser?')) return;
+  history = []; transcript = [];
+  localStorage.removeItem(chatKey());
+  log.innerHTML = '<div class="empty">Chat cleared. ' + esc(emptyLogMessage()) + '</div>';
+  activity.innerHTML = '<div class="empty">Tool calls and their complete returned data will appear here.</div>';
+  updateActivityCount();
+  updateChatControls();
+  if(meta) saveChat();
+};
+
+async function switchWorkspace(){
+  if(busy) return;
+  // Flush before the reset below: a queued write belongs to the workspace being
+  // left, not the one being entered.
+  await flushConversationSave();
+  const generation = ++workspaceGeneration;
+  designNation.style.display = isPretender() ? '' : 'none';
+  gameProfile.style.display = (isPretender() || isOpenChat()) ? 'none' : '';
+  $('#auto-control').style.display = isPretender() ? '' : 'none';
+  // Nothing in open chat writes, so offering the permission would be a lie.
+  $('#write-control').style.display = isOpenChat() ? 'none' : '';
+  if(isOpenChat()) $('#w').checked = false;
+  localStorage.setItem('dom6-agent-mode', mode.value);
+  history = []; transcript = [];
+  log.innerHTML = '<div class="empty">' + esc(emptyLogMessage()) + '</div>';
+  activity.innerHTML = '<div class="empty">Tool calls and their complete returned data will appear here.</div>';
+  updateActivityCount();
+  updateChatControls();
+  input.placeholder = isOpenChat()
+    ? 'e.g. Compare EA Yomi and EA Ulm. Which suits a bless strategy?'
+    : isPretender()
+    ? 'e.g. Design and save a strong scales pretender for this nation.'
+    : 'e.g. Assess our position. What should each commander do this turn?';
+  if(isPretender()) document.querySelector('nav button[data-p="tools"]').click();
+  restoreControls(); loadState(); loadOrders(); loadIngest();
+  await openConversationLibrary(generation);
+  if(generation!==workspaceGeneration) return;
+  if(document.querySelector('nav button.sel').dataset.p==='character') loadCharacter();
+  $('#w').onchange({target:$('#w')});
+  $('#auto').onchange({target:$('#auto')});
+}
+
+async function initialiseWorkspaces(){
+  const gameData = await fetch('/api/agent/games').then(r=>r.json());
+  gameRecords = gameData.games||[];
+  const requested=new URLSearchParams(location.search).get('game');
+  const remembered=localStorage.getItem('dom6-agent-game');
+  const live=(gameData.games||[]).filter(g=>g.live_available);
+  const chosen=(gameData.games||[]).find(g=>g.profile===(requested||remembered)) || live[live.length-1] || (gameData.games||[])[0];
+  gameProfile.innerHTML=(gameData.games||[]).map(g=>
+    '<option value="'+esc(g.profile)+'" data-game-id="'+esc(g.game_id)+'"'+(chosen&&g.profile===chosen.profile?' selected':'')+
+    (g.live_available?'':' disabled')+'>'+esc((g.nation||g.nation_slug||'?')+' · '+g.save_name+(g.live_available?'':' (live files unavailable)'))+'</option>'
+  ).join('');
+  if(chosen) localStorage.setItem('dom6-agent-game',chosen.profile);
+  gameProfile.onchange=()=>{ localStorage.setItem('dom6-agent-game',gameProfile.value); switchWorkspace(); };
+  const nations = await fetch('/api/agent/pretender/nations').then(r=>r.json());
+  designNation.innerHTML = nations.map(n =>
+    '<option value="' + n.id + '">' +
+      esc(n.age + ' · ' + n.id + ' · ' + n.name +
+          (n.epithet ? ' — ' + n.epithet : '')) + '</option>'
+  ).join('');
+  const rememberedNation = localStorage.getItem('dom6-agent-design-nation');
+  if(rememberedNation && nations.some(n => String(n.id) === rememberedNation)){
+    designNation.value = rememberedNation;
+  }
+  mode.value = localStorage.getItem('dom6-agent-mode') || 'turn';
+  mode.onchange = switchWorkspace;
+  designNation.onchange = () => {
+    localStorage.setItem('dom6-agent-design-nation', designNation.value);
+    switchWorkspace();
+  };
+  switchWorkspace();
+}
+initialiseWorkspaces();
+</script>
+</body>
+</html>

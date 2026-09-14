@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dominions 6 — Agent-visible state</title>
+<style>
+:root{--bg:#0d0f13;--panel:#151922;--panel2:#1b202b;--line:#2a3240;
+  --text:#dfe4ee;--dim:#8b95a8;--gold:#d9a441;--ok:#62bd7d;--bad:#db7075;
+  --blue:#74addd;--mono:ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{position:sticky;top:0;z-index:3;background:rgba(21,25,34,.97);
+  border-bottom:1px solid var(--line);padding:12px 18px;display:flex;
+  align-items:center;gap:15px;flex-wrap:wrap}
+h1{font-size:14px;text-transform:uppercase;letter-spacing:.12em;color:var(--gold);
+  margin:0}.stat{font-size:12px;color:var(--dim)}.stat b{color:var(--text)}
+a{color:var(--gold);text-decoration:none}.spacer{flex:1}
+button,select,input,textarea{font:inherit}button{border:0;border-radius:6px;
+  background:var(--gold);color:#171208;padding:8px 13px;font-weight:650;cursor:pointer}
+button.secondary{background:transparent;color:var(--text);border:1px solid var(--line)}
+button:disabled{opacity:.45;cursor:default}label{font-size:12px;color:var(--dim)}
+main{max-width:1500px;margin:0 auto;padding:18px}.intro{background:#17202b;
+  border:1px solid #304152;border-left:3px solid var(--blue);padding:12px 14px;
+  border-radius:7px;margin-bottom:16px}.intro p{margin:4px 0;color:#bdc7d6}
+.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+#filter{min-width:270px;flex:1;background:var(--panel);color:var(--text);
+  border:1px solid var(--line);border-radius:6px;padding:8px 10px}
+.section{border:1px solid var(--line);background:var(--panel);border-radius:8px;
+  margin:0 0 13px;overflow:hidden}.section>summary{padding:11px 14px;cursor:pointer;
+  color:var(--gold);font-weight:650;list-style:none}.section>summary::-webkit-details-marker{display:none}
+.section>summary span{color:var(--dim);font-weight:400;font-size:12px;margin-left:8px}
+.calls{padding:0 10px 10px;display:grid;grid-template-columns:repeat(auto-fit,minmax(430px,1fr));gap:9px}
+.call{border:1px solid var(--line);background:#10141c;border-radius:7px;overflow:hidden;min-width:0}
+.call.hidden{display:none}.call>summary{cursor:pointer;padding:8px 10px;list-style:none;
+  display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--blue)}
+.call>summary::-webkit-details-marker{display:none}.badge{font:600 9px/1 system-ui;
+  padding:3px 6px;border-radius:99px;text-transform:uppercase;letter-spacing:.06em;
+  background:#213b2b;color:var(--ok)}.badge.bad{background:#48262a;color:#f0a6aa}
+.args{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+pre{margin:0;border-top:1px solid var(--line);padding:10px;background:#090c12;
+  color:#bdc8d9;font:11.5px/1.48 var(--mono);white-space:pre-wrap;overflow:auto;
+  max-height:560px}.meta{font-size:12px;color:var(--dim);margin:8px 0}
+.inspector{border:1px solid var(--line);background:var(--panel);border-radius:8px;
+  padding:14px;margin-top:18px}.inspector h2{font-size:13px;color:var(--gold);margin:0 0 5px}
+.toolrow{display:grid;grid-template-columns:minmax(260px,1fr) 2fr auto;gap:9px;margin-top:10px}
+select,textarea{background:#10141c;color:var(--text);border:1px solid var(--line);
+  border-radius:6px;padding:8px}textarea{font-family:var(--mono);min-height:42px;resize:vertical}
+#inspect-result{max-height:700px;margin-top:10px;border:1px solid var(--line)}
+.prompt{margin-top:13px}.prompt summary{cursor:pointer;color:var(--dim)}
+.loading{padding:50px;text-align:center;color:var(--dim)}
+@media(max-width:760px){.calls{grid-template-columns:1fr}.toolrow{grid-template-columns:1fr}header{position:static}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Agent-visible state</h1>
+  <span class="stat">Turn <b id="turn">—</b></span>
+  <span class="stat">Nation <b id="nation">—</b></span>
+  <span class="stat">Tools <b id="tools">—</b></span>
+  <span class="spacer"></span>
+  <a href="/agent">Assistant</a>
+  <a href="/agent">Assistant</a>
+  <a href="/turns">Turn overview</a>
+</header>
+<main>
+  <div class="intro">
+    <strong>This page does not summarize a second parser.</strong>
+    <p>Every result below is produced by the same registered tool and live
+      <code>.trn/.2h</code> context given to the agent. No model is contacted.
+      Failed calls remain visible so an omission cannot look like an empty value.</p>
+    <div id="source" class="meta"></div>
+  </div>
+  <div class="controls">
+    <input id="filter" type="search" placeholder="Filter calls or returned JSON…">
+    <label><input id="deep" type="checkbox"> exhaustive map and caster expansion</label>
+    <button id="refresh">Refresh live files</button>
+    <button id="openall" class="secondary">Open visible</button>
+    <button id="closeall" class="secondary">Close all</button>
+  </div>
+  <div id="status" class="loading">Reading the live save through the agent tools…</div>
+  <div id="sections"></div>
+
+  <section class="inspector">
+    <h2>Exact read-tool inspector</h2>
+    <div class="meta">Use this for parameterized reference lookups or any call
+      not expanded above. Write tools are absent and rejected by the server.</div>
+    <div class="toolrow">
+      <select id="tool"></select>
+      <textarea id="args" spellcheck="false">{}</textarea>
+      <button id="run">Run read tool</button>
+    </div>
+    <div id="tool-help" class="meta"></div>
+    <pre id="inspect-result">Choose a tool and provide its JSON arguments.</pre>
+  </section>
+
+  <details class="prompt">
+    <summary>Effective system prompt and active model profile</summary>
+    <pre id="prompt"></pre>
+  </details>
+</main>
+<script>
+const $=s=>document.querySelector(s), esc=s=>String(s).replace(/[&<>"']/g,c=>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pretty=o=>JSON.stringify(o,null,2);
+let audit=null;
+
+function callCard(call){
+  const response=call.response||{}, ok=!!response.ok;
+  const searchable=(call.label+' '+call.tool+' '+pretty(response)).toLowerCase();
+  return `<details class="call" data-search="${esc(searchable)}">
+    <summary><span class="badge ${ok?'':'bad'}">${ok?'ok':'error'}</span>
+      <span>${esc(call.label||call.tool)}</span>
+      <span class="args">${esc(pretty(call.args||{}).replace(/\n/g,' '))}</span></summary>
+    <pre>${esc(pretty(response))}</pre></details>`;
+}
+
+function render(data){
+  audit=data;
+  $('#turn').textContent=data.turn;
+  $('#nation').textContent=data.nation_id;
+  $('#tools').textContent=`${data.read_tool_count} read / ${data.write_tool_count} write`;
+  $('#source').textContent=`Live source: ${data.source.trn} · orders: ${data.source.h2||'none'}`;
+  $('#status').style.display='none';
+  $('#sections').innerHTML=data.sections.map(section=>
+    `<details class="section" open><summary>${esc(section.title)}
+      <span>${section.calls.length} exact tool calls</span></summary>
+      <div class="calls">${section.calls.map(callCard).join('')}</div></details>`
+  ).join('');
+  const read=data.tool_catalog.filter(t=>!t.writes);
+  $('#tool').innerHTML=read.map(t=>
+    `<option value="${esc(t.name)}">${esc(t.signature)}</option>`).join('');
+  $('#prompt').textContent=pretty({active_profile:data.active_profile,
+    effective_system_prompt:data.effective_system_prompt,
+    error:data.system_prompt_error,note:data.note});
+  updateHelp(); applyFilter();
+}
+
+async function load(){
+  $('#refresh').disabled=true; $('#status').style.display='block';
+  $('#status').textContent='Reading the live save through the agent tools…';
+  try{
+    const response=await fetch('/api/agent/verification?deep='+$('#deep').checked);
+    if(!response.ok) throw new Error(await response.text());
+    render(await response.json());
+  }catch(error){
+    $('#status').textContent='Verification load failed: '+error;
+  }finally{$('#refresh').disabled=false}
+}
+
+function applyFilter(){
+  const q=$('#filter').value.trim().toLowerCase();
+  document.querySelectorAll('.call').forEach(card=>
+    card.classList.toggle('hidden',q && !card.dataset.search.includes(q)));
+}
+function selectedTool(){return audit?.tool_catalog.find(t=>t.name===$('#tool').value)}
+function updateHelp(){
+  const tool=selectedTool(); if(!tool)return;
+  $('#tool-help').textContent=tool.description+' Parameters: '+
+    (tool.parameters.map(p=>`${p.name}${p.required?'':'?'}: ${p.type}`).join(', ')||'none');
+  const required={}; tool.parameters.filter(p=>p.required).forEach(p=>{
+    required[p.name]=p.type==='integer'?0:p.type==='boolean'?false:''});
+  $('#args').value=pretty(required);
+}
+async function inspect(){
+  let args; try{args=JSON.parse($('#args').value||'{}')}
+  catch(error){$('#inspect-result').textContent='Arguments are not valid JSON: '+error;return}
+  $('#run').disabled=true; $('#inspect-result').textContent='Calling read tool…';
+  try{
+    const response=await fetch('/api/agent/inspect',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:$('#tool').value,args})});
+    const payload=await response.json();
+    $('#inspect-result').textContent=pretty(response.ok?payload:{http_status:response.status,...payload});
+  }catch(error){$('#inspect-result').textContent=String(error)}
+  finally{$('#run').disabled=false}
+}
+
+$('#refresh').onclick=load; $('#deep').onchange=load;
+$('#filter').oninput=applyFilter; $('#tool').onchange=updateHelp; $('#run').onclick=inspect;
+$('#openall').onclick=()=>document.querySelectorAll('.section,.call:not(.hidden)').forEach(x=>x.open=true);
+$('#closeall').onclick=()=>document.querySelectorAll('.section,.call').forEach(x=>x.open=false);
+load();
+</script>
+</body>
+</html>

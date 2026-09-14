@@ -1,0 +1,83 @@
+# Copy this file to `dom6-assistant.toml` and edit the one block you need.
+#
+#     cp dom6-assistant.toml.example dom6-assistant.toml
+#
+# Everything here has a working default except which model to talk to. That is
+# the only decision you have to make to get started.
+#
+# This file is read from the project directory, or from
+#   Linux/macOS  ~/.config/dom6-assistant/config.toml
+#   Windows      %APPDATA%\dom6-assistant\config.toml
+# The user-level one is the better home for an API key: it is outside the
+# repository, so it cannot be committed by accident.
+
+[model]
+# Which block below to use. Almost always "openai": that is the name of the
+# *protocol*, not the company, and nearly every server speaks it -- llama.cpp,
+# KoboldCpp, vLLM, LM Studio, Ollama, OpenRouter, OpenAI itself.
+backend = "openai"
+
+
+# ---------------------------------------------------------------------------
+# Pick ONE of the following and paste it into the [model.openai] block.
+# ---------------------------------------------------------------------------
+#
+# llama.cpp   (llama-server --port 8080)
+#     base_url = "http://localhost:8080/v1"
+#     model    = "auto"
+#
+# KoboldCpp   (default port)
+#     base_url = "http://localhost:5001/v1"
+#     model    = "auto"
+#
+# LM Studio   (Developer tab -> Start Server)
+#     base_url = "http://localhost:1234/v1"
+#     model    = "auto"
+#
+# Ollama
+#     base_url = "http://localhost:11434/v1"
+#     model    = "llama3.3"        # Ollama needs the name, "auto" will not do
+#
+# OpenAI
+#     base_url = "https://api.openai.com/v1"
+#     model    = "gpt-4o"
+#     api_key  = "sk-..."
+#
+# OpenRouter  (many hosted models behind one key)
+#     base_url = "https://openrouter.ai/api/v1"
+#     model    = "anthropic/claude-sonnet-4"
+#     api_key  = "sk-or-..."
+
+[model.openai]
+# The endpoint. Note the "/v1" on the end -- it is part of the address, and
+# leaving it off is the most common reason nothing connects.
+base_url = "http://localhost:5001/v1"
+
+# "auto" asks the server what it is serving, so you can swap models without
+# editing this file. Hosted providers need the exact name instead.
+model = "auto"
+
+# Your key, if the server wants one. Local servers usually do not: leave it
+# blank and no Authorization header is sent at all.
+api_key = ""
+
+# Alternative to the above: name an environment variable to read the key from,
+# and leave api_key blank. Safer if this file is in a repository.
+#   api_key_env = "OPENAI_API_KEY"
+
+# Seconds allowed for ONE model reply, not for a whole turn. Slow local models
+# on a long context need more than you would think. 0 disables the deadline.
+timeout_seconds = 600
+
+
+[ingest]
+# Turns are read automatically while the web server runs, so finishing a turn
+# in Dominions is the whole workflow. Set false, or run with
+# DOM6_AUTO_INGEST=0, for a session that never touches your save files.
+auto = true
+
+# Where Dominions keeps saved games. Detected per platform; set this only if
+# yours is somewhere unusual, such as a Proton prefix.
+#   Linux/macOS  ~/.dominions6/savedgames
+#   Windows      %APPDATA%\Dominions6\savedgames
+# save_root = "~/.dominions6/savedgames"
