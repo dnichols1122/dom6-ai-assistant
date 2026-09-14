@@ -26,6 +26,24 @@ whether it worked. No config file to edit.
 `uv sync` installs a package that cannot start a server. Every command needs
 `uv run`, which is what puts the project on the path.
 
+That is a complete, working assistant: it reads your saves and knows the game's
+units, spells, events and nations. The three reference libraries are separate,
+optional, and each fetched onto your own machine:
+
+```bash
+# Illwinter's manual, searchable and cited by page.
+uv sync --extra manual && uv run dom6-assistant manual-fetch && uv run dom6-assistant manual-build
+
+# The community strategy wiki. Polite and resumable, around 30 minutes.
+uv run dom6-assistant wiki-scrape && uv run dom6-assistant wiki-build
+
+# A strategy video, searchable by timestamp.
+uv sync --extra videos && uv run dom6-assistant video-add <youtube url>
+```
+
+Skip any of them and the assistant simply says that source was unavailable
+rather than inventing what it would have said.
+
 [RUNNING.md](RUNNING.md) covers this properly, including Windows, pointing it at
 a model, and what each page is for.
 
