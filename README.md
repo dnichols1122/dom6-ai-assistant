@@ -18,20 +18,33 @@ mirror and the video fetcher. Everything, by default, and safe to re-run.
 Budget about 35 minutes: the wiki mirror is the slow part. `--minimal` skips
 all three libraries and finishes in a couple of minutes; `--ask` lets you pick.
 
-```bash
-# Linux and macOS
-./scripts/install.sh
+**Windows:** double-click **`install.bat`**. That is the whole procedure.
 
-# Windows, in PowerShell
+**Linux and macOS:**
+
+```bash
+./scripts/install.sh
+```
+
+<details>
+<summary>Starting it another way</summary>
+
+`install.bat` exists so nobody has to open PowerShell and type an
+execution-policy incantation. If you would rather run the script directly:
+
+```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install.ps1
 ```
 
-`-ExecutionPolicy Bypass` applies to that one process only; Windows blocks
-downloaded scripts by default and this does not change any system setting.
+`-ExecutionPolicy Bypass` applies to that one process only. Windows blocks
+downloaded scripts by default, and this changes no system setting.
+
+</details>
 
 | | |
 |---|---|
 | *(no flags)* | everything — assistant and all three libraries |
+| | *Windows: pass flags to `install.bat` the same way, e.g.* `install.bat -Minimal` |
 | `--minimal` / `-Minimal` | just the assistant, ~2 minutes |
 | `--ask` / `-Ask` | choose each library |
 | `--start` / `-Start` | start the server when finished |

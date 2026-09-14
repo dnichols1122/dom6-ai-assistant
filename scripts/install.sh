@@ -61,8 +61,10 @@ ask() {
     return 1
   fi
   local reply
-  read -r -p "  $prompt [y/N] " reply
-  [[ "$reply" =~ ^[Yy] ]]
+  # Enter means yes, matching the default-everything behaviour. Answering is
+  # one keystroke; only a deliberate "n" declines.
+  read -r -p "  $prompt [Y/n] " reply
+  [[ -z "$reply" || "$reply" =~ ^[Yy] ]]
 }
 
 # Consent for the one thing that runs someone else's code from the network.
@@ -79,8 +81,8 @@ confirm_uv() {
     return 1
   fi
   local reply
-  read -r -p "  Run that now? [y/N] " reply
-  [[ "$reply" =~ ^[Yy] ]]
+  read -r -p "  Run that now? [Y/n] " reply
+  [[ -z "$reply" || "$reply" =~ ^[Yy] ]]
 }
 
 # --- uv ---------------------------------------------------------------------

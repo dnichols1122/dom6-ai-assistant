@@ -79,16 +79,17 @@ function Confirm-Uv {
         Note '(-Yes given, so installing uv without asking)'
         return $true
     }
-    $reply = Read-Host '  Run that now? [y/N]'
-    return $reply -match '^[Yy]'
+    $reply = Read-Host '  Run that now? [Y/n]'
+    return ($reply -eq '') -or ($reply -match '^[Yy]')
 }
 
 function Ask {
     param([string]$Question)
     if ($mode -eq 'all')     { return $true }
     if ($mode -eq 'minimal') { return $false }
-    $reply = Read-Host "  $Question [y/N]"
-    return $reply -match '^[Yy]'
+    # Enter means yes, matching the default-everything behaviour.
+    $reply = Read-Host "  $Question [Y/n]"
+    return ($reply -eq '') -or ($reply -match '^[Yy]')
 }
 
 # Run a command and stop if it failed. PowerShell does not treat a non-zero
