@@ -86,8 +86,10 @@ rather than inventing what it would have said.
 
 </details>
 
-[RUNNING.md](RUNNING.md) covers this properly, including Windows, pointing it at
-a model, and what each page is for.
+[USING.md](USING.md) is the guide to the interface — what each panel does, how
+a turn goes, and what to check when an answer looks wrong.
+[RUNNING.md](RUNNING.md) covers configuration, including Windows and the
+optional reference libraries.
 
 ## Running it
 
