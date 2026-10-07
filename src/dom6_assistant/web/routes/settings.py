@@ -95,6 +95,27 @@ def post_config(body: ConfigUpdate) -> dict[str, Any]:
     return {"ok": True}
 
 
+def _connection_hint(lowered_error: str, base_url: str) -> str:
+    """Turn a connection failure into something a player can act on."""
+    hint = ""
+    if "connection refused" in lowered_error or "failed to establish" in lowered_error:
+        hint = ("nothing is listening there. Is the model server running, "
+                "and is the port right?")
+    elif "404" in lowered_error:
+        hint = ("reached the host but not the API. base_url usually has to "
+                "end in /v1.")
+    elif "401" in lowered_error or "403" in lowered_error:
+        hint = "the endpoint rejected the key."
+    # A missing /v1 is the single most common mistake, and it does not reliably
+    # show up as a 404: get the port wrong as well and the connection is
+    # refused first, hiding it behind the other message. It is visible in the
+    # address either way, so say so either way.
+    if base_url and not base_url.rstrip("/").endswith("/v1"):
+        hint = (hint + " " if hint else "") + (
+            "Also: base_url usually has to end in /v1.")
+    return hint
+
+
 class ConnectionTest(BaseModel):
     """An endpoint to try, before it is saved."""
     base_url: str | None = None
@@ -126,27 +147,65 @@ def test_connection(body: ConnectionTest) -> dict[str, Any]:
     try:
         served = client.models(timeout=15)
     except LLMError as exc:
-        hint = ""
-        text = str(exc).lower()
-        if "connection refused" in text or "failed to establish" in text:
-            hint = ("nothing is listening there. Is the model server running, "
-                    "and is the port right?")
-        elif "404" in text:
-            hint = ("reached the host but not the API. base_url usually has to "
-                    "end in /v1.")
-        elif "401" in text or "403" in text:
-            hint = "the endpoint rejected the key."
-        # A missing /v1 is the single most common mistake, and it does not
-        # reliably show up as a 404: get the port wrong as well and the
-        # connection is refused first, hiding it behind the other message.
-        # It is visible in the address either way, so say so either way.
-        if not base_url.rstrip("/").endswith("/v1"):
-            hint = (hint + " " if hint else "") + (
-                "Also: base_url usually has to end in /v1.")
-        return {"ok": False, "error": str(exc), "hint": hint,
+        return {"ok": False, "error": str(exc),
+                "hint": _connection_hint(str(exc).lower(), base_url),
                 "base_url": base_url}
     return {"ok": True, "base_url": base_url, "models": served[:20],
             "count": len(served)}
+
+
+# ---------------------------------------------------------------------------
+# Picking an endpoint without typing one
+# ---------------------------------------------------------------------------
+
+@router.get("/providers")
+def list_providers() -> dict[str, Any]:
+    """Known endpoints, grouped, for the provider dropdown.
+
+    Also reports which one the current configuration matches, so opening the
+    panel preselects what is already set rather than showing a blank list.
+    """
+    from dom6_assistant import llm_providers
+
+    bcfg = cfg_mod.backend_config(cfg_mod.load(), "openai")
+    result = llm_providers.catalogue()
+    result["current"] = llm_providers.identify(bcfg.get("base_url", ""))
+    return result
+
+
+class ModelQuery(BaseModel):
+    """An endpoint to ask what it is serving, before anything is saved."""
+    base_url: str | None = None
+    api_key: str | None = None
+
+
+@router.post("/models")
+def list_models(body: ModelQuery) -> dict[str, Any]:
+    """Ask the endpoint for its model list, to fill the model dropdown.
+
+    Separate from /test because the two answer different questions: /test asks
+    "did this work", this asks "what can I choose". A provider with hundreds of
+    models is the normal case, so the whole list is returned and the interface
+    filters it.
+    """
+    from dom6_assistant.agent.llm import LLMError, OpenAICompatClient
+
+    bcfg = dict(cfg_mod.backend_config(cfg_mod.load(), "openai"))
+    base_url = (body.base_url or bcfg.get("base_url") or "").strip()
+    if not base_url:
+        raise HTTPException(400, detail="no base_url to query")
+    key = body.api_key if body.api_key not in (None, "", "********") else \
+        cfg_mod.resolve_api_key(bcfg)
+
+    client = OpenAICompatClient(base_url=base_url, model="auto", api_key=key,
+                                timeout=25)
+    try:
+        served = client.models(timeout=20)
+    except LLMError as exc:
+        return {"ok": False, "error": str(exc), "models": [], "count": 0,
+                "hint": _connection_hint(str(exc).lower(), base_url)}
+    return {"ok": True, "models": sorted(served), "count": len(served),
+            "base_url": base_url}
 
 
 # ---------------------------------------------------------------------------

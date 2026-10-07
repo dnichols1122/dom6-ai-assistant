@@ -1459,6 +1459,16 @@ async function loadCharacter(){
 // nothing — which is why there is a preview against pasted output.
 let profileState = null;
 
+// State that belongs to the endpoint box but outlives it. Activate rebuilds
+// the whole model pane, so anything held only inside it is thrown away with no
+// warning: a key typed but not saved, the model list fetched from the
+// endpoint, and the model just chosen from that list. Losing the list is the
+// worst of the three, because the box then falls back to the saved value and
+// collapses to "auto", making a 464-entry list look like it never loaded.
+let unsavedApiKey = '';
+let fetchedModels = [];
+let pendingModel = '';
+
 async function loadModel(force=false){
   const pane = $('#p-model');
   // Tab switches merely hide this pane. Rebuilding it here would replace
@@ -1476,15 +1486,22 @@ async function loadModel(force=false){
     // making people edit TOML to point at their own model was the worst part
     // of setting this up.
     '<div class="card"><div class="meta"><b>Model endpoint</b></div>' +
-    '<label class="help" style="display:block">Server address \u2014 must end in /v1</label>' +
+    '<label class="help" style="display:block">Provider</label>' +
+    '<select id="ep-provider"></select>' +
+    '<label class="help" style="display:block;margin-top:6px">Server address</label>' +
     '<input id="ep-url" class="field" placeholder="http://localhost:5001/v1">' +
-    '<label class="help" style="display:block;margin-top:6px">Model \u2014 <code>auto</code> asks the server; hosted providers need the exact name</label>' +
-    '<input id="ep-model" class="field" placeholder="auto">' +
-    '<label class="help" style="display:block;margin-top:6px">API key \u2014 leave blank for a local server</label>' +
-    '<input id="ep-key" class="field" type="password" placeholder="(none)" autocomplete="off">' +
+    '<div id="ep-keyrow">' +
+      '<label class="help" style="display:block;margin-top:6px">API key <span id="ep-keylink"></span></label>' +
+      '<input id="ep-key" class="field" type="password" placeholder="(none)" autocomplete="off">' +
+    '</div>' +
     '<div class="row" style="margin-top:7px">' +
-      '<button class="ghost mini" id="ep-test">Test connection</button>' +
-      '<button class="ghost mini" id="ep-save">Save endpoint</button></div>' +
+      '<button class="ghost mini" id="ep-connect">Connect</button>' +
+      '<button class="ghost mini" id="ep-save">Save</button></div>' +
+    '<label class="help" style="display:block;margin-top:7px">Model ' +
+      '<span id="ep-count" style="opacity:.65"></span></label>' +
+    '<input id="ep-filter" class="field" placeholder="filter the list\u2026" ' +
+      'style="margin-bottom:4px;display:none">' +
+    '<select id="ep-model"></select>' +
     '<div id="ep-out" class="help"></div></div>' +
 
     '<div class="card"><div class="meta"><b>Profile</b></div>' +
@@ -1570,52 +1587,143 @@ async function loadModel(force=false){
   });
 
   // -- endpoint ---------------------------------------------------------
+  // Pick a provider, paste a key, choose a model the server itself reported.
+  // Nobody should have to know that KoboldCpp is on 5001 or that OpenRouter
+  // wants /api/v1, and the commonest failure of all was a missing /v1.
   (async () => {
-    const out = $('#ep-out');
-    try{
-      const cfg = await (await fetch('/api/settings')).json();
+    const out = $('#ep-out'), sel = $('#ep-provider'), url = $('#ep-url');
+    const keyRow = $('#ep-keyrow'), keyLink = $('#ep-keylink'), key = $('#ep-key');
+    const modelSel = $('#ep-model'), filter = $('#ep-filter'), count = $('#ep-count');
+    let catalogue = {}, models = [];
+
+    const dress = el => {
+      el.style.width = '100%'; el.style.background = 'var(--panel)';
+      el.style.color = 'var(--text)'; el.style.border = '1px solid var(--line)';
+      el.style.borderRadius = '6px'; el.style.padding = '6px';
+    };
+    dress(sel); dress(modelSel);
+
+    // Model ids are full of punctuation nobody remembers the placement of, so
+    // "glm5.3", "glm 5.3" and "GLM-5.3" all have to find z-ai/glm-5.3.
+    const loose = text => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+    const paint = keep => {
+      const needle = loose(filter.value);
+      const shown = models.filter(m => !needle || loose(m).includes(needle));
+      modelSel.innerHTML = shown.map(m =>
+        '<option' + (m === keep ? ' selected' : '') + '>' + esc(m) + '</option>').join('');
+      count.textContent = !models.length ? ''
+        : shown.length === models.length ? '(' + models.length + ')'
+        : '(' + shown.length + ' of ' + models.length + ')';
+      // A long list is unusable without a filter; a short one does not need it.
+      filter.style.display = models.length > 12 ? '' : 'none';
+    };
+    filter.oninput = () => paint(modelSel.value);
+    // Without this, choosing a model records nothing and the next rebuild
+    // silently reverts to whatever was last saved.
+    modelSel.onchange = () => { pendingModel = modelSel.value; };
+
+    const setModels = (names, keep) => {
+      models = names.slice();
+      if (keep && !models.includes(keep)) models.unshift(keep);
+      if (!models.includes('auto')) models.unshift('auto');
+      paint(keep || 'auto');
+    };
+
+    const applyProvider = id => {
+      const p = (catalogue[id] || {});
+      if (p.base_url) url.value = p.base_url;
+      if (id === 'custom') url.value = url.value || '';
+      // Local servers take no key at all; showing the box invites confusion.
+      keyRow.style.display = p.needs_key === false ? 'none' : '';
+      keyLink.innerHTML = p.key_url
+        ? '\u2014 <a href="' + esc(p.key_url) + '" target="_blank" rel="noopener">get one</a>'
+        : '';
+      out.textContent = p.note || '';
+    };
+
+    try {
+      const [cat, cfg] = await Promise.all([
+        (await fetch('/api/settings/providers')).json(),
+        (await fetch('/api/settings')).json(),
+      ]);
+      sel.innerHTML = cat.groups.map(g =>
+        '<optgroup label="' + esc(g.label) + '">' + g.providers.map(p => {
+          catalogue[p.id] = p;
+          return '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>';
+        }).join('') + '</optgroup>').join('');
+
       const openai = (cfg.backends || {}).openai || {};
-      $('#ep-url').value = (openai.extra || {}).base_url || '';
-      $('#ep-model').value = openai.model || '';
+      // Survives Activate and anything else that rebuilds this pane.
+      key.value = unsavedApiKey;
+      key.oninput = () => { unsavedApiKey = key.value; };
+      if (openai.key_is_set) key.placeholder = '(a key is stored \u2014 leave blank to keep it)';
+      url.value = (openai.extra || {}).base_url || '';
+      sel.value = cat.current || 'custom';
+      applyProvider(sel.value);
+      url.value = (openai.extra || {}).base_url || url.value;
+      // Prefer what is in hand over what is on disk: a list just fetched and
+      // a model just picked are both newer than the saved configuration.
+      setModels(fetchedModels, pendingModel || openai.model || 'auto');
       out.textContent = openai.key_is_set
         ? 'A key is configured. Leave the field blank to keep it.'
-        : 'No key configured, which is normal for a local server.';
-    }catch(error){ out.textContent = 'Could not read the current settings.'; }
+        : (catalogue[sel.value] || {}).needs_key === false
+          ? 'Local server, no key needed.' : 'No key configured yet.';
+    } catch (error) {
+      out.textContent = 'Could not read the current settings.';
+    }
+
+    sel.onchange = () => {
+      // A different endpoint serves different models, so the fetched list and
+      // the pick made from it no longer mean anything.
+      applyProvider(sel.value);
+      fetchedModels = []; pendingModel = '';
+      setModels([], 'auto');
+    };
 
     const payload = () => ({
-      base_url: $('#ep-url').value.trim(),
-      model: $('#ep-model').value.trim() || 'auto',
-      api_key: $('#ep-key').value,
+      base_url: url.value.trim(),
+      model: modelSel.value || 'auto',
+      api_key: key.value,
     });
 
-    $('#ep-test').onclick = async () => {
-      out.textContent = 'Testing\u2026';
-      const response = await fetch('/api/settings/test', {method:'POST',
-        headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload())});
+    $('#ep-connect').onclick = async () => {
+      out.textContent = 'Asking the endpoint what it serves\u2026';
+      const response = await fetch('/api/settings/models', {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({base_url: url.value.trim(), api_key: key.value})});
       const result = await response.json();
-      if(result.ok){
-        out.innerHTML = 'Reached it. ' + result.count + ' model(s) available' +
-          (result.models && result.models.length
-            ? ': <code>' + result.models.slice(0,4).map(esc).join('</code> <code>') + '</code>'
-            : '.');
-      }else{
+      if (!response.ok) { out.textContent = problemText(result, 'Could not connect'); return; }
+      if (!result.ok) {
         out.innerHTML = '<b style="color:var(--bad)">Could not reach it.</b> ' +
           esc(result.hint || '') + '<br><span style="opacity:.7">' +
           esc(result.error || '') + '</span>';
+        return;
       }
+      fetchedModels = result.models.slice();
+      setModels(fetchedModels, pendingModel || modelSel.value);
+      out.textContent = 'Connected. ' + result.count +
+        ' model(s) available \u2014 pick one, then Save.';
     };
 
     $('#ep-save').onclick = async () => {
       const fields = payload();
       // An untouched key field must not overwrite the stored one with "".
-      if(!fields.api_key) delete fields.api_key;
-      const response = await fetch('/api/settings', {method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({active_backend:'openai', backends:{openai:fields}})});
+      if (!fields.api_key) delete fields.api_key;
+      const response = await fetch('/api/settings', {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({active_backend: 'openai', backends: {openai: fields}})});
       const result = await response.json();
-      if(!response.ok){ out.textContent = problemText(result,'Could not save'); return; }
-      $('#ep-key').value = '';
-      out.textContent = 'Saved. It applies to the next message; no restart needed.';
+      if (!response.ok) { out.textContent = problemText(result, 'Could not save'); return; }
+      const sentKey = Boolean(fields.api_key);
+      pendingModel = fields.model;
+      key.value = '';
+      unsavedApiKey = '';
+      if (sentKey) key.placeholder = '(a key is stored \u2014 leave blank to keep it)';
+      out.textContent = 'Saved ' + fields.model +
+        (sentKey ? ', and the key is stored \u2014 the box is cleared on purpose'
+                 : ', keeping the stored key') +
+        '. Applies to the next message; no restart needed.';
     };
   })();
 

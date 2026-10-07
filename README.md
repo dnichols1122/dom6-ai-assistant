@@ -58,9 +58,9 @@ uv run python -m dom6_assistant.reference.build_db --refresh
 uv run uvicorn dom6_assistant.ui.app:app --port 8001
 ```
 
-Open <http://127.0.0.1:8001/> and point the **Model endpoint** box at your
-model — local or hosted — with a **Test connection** button that tells you
-whether it worked. No config file to edit.
+Open <http://127.0.0.1:8001/>, pick your provider from the dropdown, paste a
+key if it needs one, and choose a model from the list the endpoint itself
+reports. No addresses to type and no config file to edit.
 
 **`--extra web` is not optional** — FastAPI and uvicorn live there, and a plain
 `uv sync` installs a package that cannot start a server. Every command needs
@@ -102,11 +102,22 @@ a model, and what each page is for.
 Either way, the assistant is at <http://127.0.0.1:8001/>. Both take
 `--port 9000` if something already has that port.
 
-The first thing to do is point the **Model endpoint** box in the left panel at
-your model — a local server or a hosted API — and press **Test connection**. It
-says whether it reached the model and what that model is, so a wrong port or a
-missing `/v1` takes one click to find rather than showing up as a failure
-mid-conversation. **Save endpoint** applies from the next message; no restart.
+The first thing to do is set up the **Model endpoint** box in the left panel:
+
+1. **Provider** — around twenty are listed, grouped into ones running on this
+   machine (llama.cpp, KoboldCpp, LM Studio, Ollama, vLLM and friends) and
+   hosted services (OpenRouter, OpenAI, Anthropic, DeepSeek, Groq, Mistral and
+   others). Choosing one fills in the address, so there is nothing to type and
+   no `/v1` to forget.
+2. **API key** — only asked for when the provider needs one, with a link to the
+   page that issues it. Local servers do not get a key box at all.
+3. **Connect** — asks the endpoint what it serves and fills the model list from
+   the answer. If it cannot reach the endpoint it says why, in terms you can
+   act on, rather than failing later mid-conversation.
+4. **Model** — pick from the list. Long lists get a filter box, and the filter
+   ignores punctuation, so `glm5.3` finds `z-ai/glm-5.3`.
+5. **Save** — applies from the next message; no restart. The key box clears
+   itself on purpose once the key is stored; leave it blank to keep it.
 
 Leave it running while you play. It watches your save folder, so finishing a
 turn in Dominions is the whole workflow — there is nothing to import.
